@@ -1,0 +1,6 @@
+[package]
+name = "wikistory"
+version = "0.1.0"
+authors = ["beaubbe <gabriel.couvrette@gmail.com>"]
+
+[dependencies]
