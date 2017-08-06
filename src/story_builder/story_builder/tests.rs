@@ -52,27 +52,35 @@ impl ArticleProvider for TestArticleProvider {
         }
     }
 
-    #[test]
-    /// For: build_suggestions_msg
-    fn build_suggestions_msg_test() {
-        let provider = TestArticleProvider {};
-        let story_builder = StoryBuilder::new(&provider);
+#[test]
+/// For: build_suggestions_msg
+fn build_suggestions_msg_test() {
+    let provider = TestArticleProvider {};
+    let story_builder = StoryBuilder::new(&provider);
 
-        assert_eq!(story_builder.build_suggestions_msg("not-found"), provider.expected_suggestion());
-    }
+    assert_eq!(story_builder.build_suggestions_msg("not-found"), provider.expected_suggestion());
+}
 
-    #[test]
-    /// For: build_story
-    fn build_story_cannot_find_first_article_suggest() {
-        let provider = TestArticleProvider {};
-        let story_builder = StoryBuilder::new(&provider);
-        assert_eq!(story_builder.build_story("not-found", "found"), Err(provider.expected_suggestion()));
-    }
+#[test]
+/// For: build_story
+fn build_story_cannot_find_first_article_suggest() {
+    let provider = TestArticleProvider {};
+    let story_builder = StoryBuilder::new(&provider);
+    assert_eq!(story_builder.build_story("not-found", "found"), Err(provider.expected_suggestion()));
+}
 
-    #[test]
-    /// For: build_story
-    fn build_story_cannot_find_second_article_suggest() {
-        let provider = TestArticleProvider {};
-        let story_builder = StoryBuilder::new(&provider);
-        assert_eq!(story_builder.build_story("found", "not-found"), Err(provider.expected_suggestion()));
-    }
+#[test]
+/// For: build_story
+fn build_story_cannot_find_second_article_suggest() {
+    let provider = TestArticleProvider {};
+    let story_builder = StoryBuilder::new(&provider);
+    assert_eq!(story_builder.build_story("found", "not-found"), Err(provider.expected_suggestion()));
+}
+
+#[test]
+/// For: build_story
+fn build_story_is_working() {
+    let provider = TestArticleProvider {};
+    let story_builder = StoryBuilder::new(&provider);
+    assert_eq!(story_builder.build_story("found", "found"), Err(provider.expected_story()));
+}
