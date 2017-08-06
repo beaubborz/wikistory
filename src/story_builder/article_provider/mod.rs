@@ -1,5 +1,5 @@
 pub trait Article {
-    fn get_related(&self) -> Vec<String>;
+    fn get_related_topics(&self) -> &Vec<String>;
 }
 
 pub trait ArticleProvider {

@@ -2,27 +2,58 @@ use story_builder::article_provider::ArticleProvider;
 
 pub struct StoryBuilder<'a> {
     article_provider: &'a ArticleProvider,
+    max_depth: u8,
 }
 
 impl <'a> StoryBuilder<'a> {
     pub fn new(article_provider: &'a ArticleProvider) -> StoryBuilder {
         StoryBuilder {
-            article_provider
+            article_provider,
+            max_depth: 5, // default value for now
         }
     }
 
     fn build_story(&self, start_topic: &str , end_topic: &str) -> Result<String, String> {
+        // If one of the topics is an empty string, do not try to make a story out of it.
+        if start_topic == "" {
+            return Err("Missing start topic.".to_owned());
+        }
+        if end_topic == "" {
+            return Err("Missing end topic.".to_owned());
+        }
+
+        // If both topics are the same,
+        // there is no point in trying to figure out the story.
+        if start_topic == end_topic {
+            return Err("No story to build; same start and end topics.".to_owned());
+        }
+
+        // Load the first article
         let start_article = match self.article_provider.get(start_topic) {
             Some(start_article) => start_article,
             None => {return Err(self.build_suggestions_msg(start_topic));},
         };
 
+        // Load the end article
         let end_article = match self.article_provider.get(end_topic) {
             Some(end_topic) => end_topic,
             None => {return Err(self.build_suggestions_msg(end_topic));},
         };
 
-        Err("TODO".to_owned())
+        // To build a story, we need to build a tree starting at the start_article
+        // node and going down in a "breadth-first" way; that way, once we find
+        // the end note, we know it is the shortest path to it. Also, going depth-first
+        // will be impossibly long to complete sincethe depth of the wikipedia
+        // article tree is almost infinite.
+
+        // We will hold a reference to the last level of the tree we parsed.
+        // (The first level only holds the first article).
+        let last_level = vec![TreeNode::new(start_article)];
+        //for _ in 0..max_depth {
+        //    last_level = last_level.iter().map(|i| {TreeNode::new(i)}).collect();
+        //}
+
+        Err(format!("Reached depth of <{}> without finding <{}>. Stopping search.", self.max_depth, end_topic).to_owned())
     }
 
     fn build_suggestions_msg(&self, topic: &str) -> String {
@@ -32,6 +63,18 @@ impl <'a> StoryBuilder<'a> {
         }
 
         msg
+    }
+}
+
+struct TreeNode<T> {
+    data: T,
+}
+
+impl <T> TreeNode<T> {
+    fn new(data: T) -> TreeNode<T> {
+        TreeNode {
+            data
+        }
     }
 }
 

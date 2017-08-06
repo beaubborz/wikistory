@@ -1,3 +1,4 @@
+extern crate wikistory;
 
 /// The main entry point for WikiStory. It is tasked with reading user input to
 /// choose a starting and ending topic, as well as printing out results.
@@ -9,7 +10,6 @@ fn main() {
     };
 
 println!("Wikistory will now try to generate a story from <{}> to <{}>: ", first_topic, end_topic);
-
 }
 
 /// This function extracts topics from a vector and expect the following items:
