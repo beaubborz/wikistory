@@ -1,4 +1,4 @@
-mod story_builder {
-    mod article_provider;
-    mod story_builder;
+pub mod story_builder {
+    pub mod article_provider;
+    pub mod story_builder;
 }
