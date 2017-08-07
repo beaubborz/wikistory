@@ -1,5 +1,7 @@
 use story_builder::story_builder::*;
 use story_builder::article_provider::*;
+use std::collections::HashMap;
+use std::rc::Rc;
 
 static EXPECTED_SUGGESTION: &'static str = "Cannot find wikipedia article for <not-found>, try one of the following suggestions:\r\n\
 - Suggestion 1\r\n\
@@ -134,4 +136,49 @@ fn build_story_empty_end_topic_should_err() {
     let story_builder = StoryBuilder::new(&provider);
     assert_eq!(story_builder.build_story("First topic", ""),
                Err("Missing end topic.".to_owned()));
+}
+
+
+#[test]
+/// For: build_story
+fn build_story_end_topic_found_in_start_article() {
+    let mut prebuilt_rels = Rc::new(HashMap::new());
+    Rc::get_mut(&mut prebuilt_rels).unwrap().insert("start", vec!["rel1".to_owned(),
+                                                                  "rel2".to_owned(),
+                                                                  "end".to_owned(),
+                                                                  "rel3".to_owned()]);
+    struct TestArticle {
+        topic: String,
+        prebuilt_rels: Rc<HashMap<&'static str, Vec<String>>>,
+    }
+
+    impl TestArticle {
+        fn new(topic: String, prebuilt_rels: Rc<HashMap<&'static str, Vec<String>>>) -> TestArticle {
+            TestArticle {topic, prebuilt_rels}
+        }
+    }
+
+    impl Article for TestArticle {
+        fn get_related_topics(&self) -> &Vec<String> {
+            self.prebuilt_rels.get::<str>(&self.topic).expect("Tried to access a node that doesn't exist!")
+        }
+    }
+    struct TestProvider {
+        prebuilt_rels: Rc<HashMap<&'static str, Vec<String>>>
+    }
+    impl TestProvider {
+        fn new(prebuilt_rels: Rc<HashMap<&'static str, Vec<String>>>) -> TestProvider {
+            TestProvider {prebuilt_rels: prebuilt_rels}
+        }
+    }
+    impl ArticleProvider for TestProvider {
+        fn get(&self, topic: &str) -> Option<Box<Article>> {
+                let new_rels = self.prebuilt_rels.clone();
+                Some(Box::new(TestArticle::new(topic.to_owned(), new_rels)))
+        }
+        fn search(&self, topic: &str) -> Vec<String> {panic!("search() should not be called in this test.");}
+    }
+    let provider = TestProvider::new(prebuilt_rels.clone());
+    let story_builder = StoryBuilder::new(&provider);
+    assert_eq!(story_builder.build_story("start", "end"), Ok("Paragraph with end in it.\r\n".to_owned()));
 }
