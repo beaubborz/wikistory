@@ -34,18 +34,20 @@ fn build_suggestions_msg_is_working() {
 /// For: build_story
 fn build_story_cannot_find_first_article_suggest() {
     struct TestArticle {
-        topics: Vec<String>
+        topics: Vec<Reference>
     }
     impl Article for TestArticle {
-        fn get_related_topics(&self) -> &Vec<String> {&self.topics}
+        fn get_related_references(&self) -> &Vec<Reference> {&self.topics}
     }
     struct TestProvider {}
     impl ArticleProvider for TestProvider {
         fn get(&self, topic: &str) -> Option<Box<Article>> {
-            if topic == "found"
-                {Some(Box::new(TestArticle {topics: vec![]}))}
-            else
-                {None}
+            if topic == "found" {
+                Some(Box::new(TestArticle {topics: vec![]}))
+            }
+            else {
+                None
+            }
         }
         #[allow(unused_variables)]
         fn search(&self, topic: &str) -> Vec<String> {
@@ -64,10 +66,10 @@ fn build_story_cannot_find_first_article_suggest() {
 /// For: build_story
 fn build_story_cannot_find_second_article_suggest() {
     struct TestArticle {
-        topics: Vec<String>
+        topics: Vec<Reference>
     }
     impl Article for TestArticle {
-        fn get_related_topics(&self) -> &Vec<String> {&self.topics}
+        fn get_related_references(&self) -> &Vec<Reference> {&self.topics}
     }
     struct TestProvider {}
     impl ArticleProvider for TestProvider {
@@ -143,37 +145,37 @@ fn build_story_empty_end_topic_should_err() {
 /// For: build_story
 fn build_story_end_topic_found_in_start_article() {
     let mut prebuilt_rels = Rc::new(HashMap::new());
-    Rc::get_mut(&mut prebuilt_rels).unwrap().insert("start", vec!["rel1".to_owned(),
-                                                                  "rel2".to_owned(),
-                                                                  "end".to_owned(),
-                                                                  "rel3".to_owned()]);
+    Rc::get_mut(&mut prebuilt_rels).unwrap().insert("start", vec![Reference {topic: "rel1".to_owned(), paragraph: "Paragraph for rel1.".to_owned()},
+                                                                  Reference {topic: "rel2".to_owned(), paragraph: "Paragraph for rel1.".to_owned()},
+                                                                  Reference {topic: "end".to_owned(), paragraph: "Paragraph for end.".to_owned()},
+                                                                  Reference {topic: "rel3".to_owned(), paragraph: "Paragraph for rel3.".to_owned()}]);
     struct TestArticle {
         topic: String,
-        prebuilt_rels: Rc<HashMap<&'static str, Vec<String>>>,
+        prebuilt_rels: Rc<HashMap<&'static str, Vec<Reference>>>,
     }
 
     impl TestArticle {
-        fn new(topic: String, prebuilt_rels: Rc<HashMap<&'static str, Vec<String>>>) -> TestArticle {
+        fn new(topic: String, prebuilt_rels: Rc<HashMap<&'static str, Vec<Reference>>>) -> TestArticle {
             TestArticle {topic, prebuilt_rels}
         }
     }
 
     impl Article for TestArticle {
-        fn get_related_topics(&self) -> &Vec<String> {
+            fn get_related_references(&self) -> &Vec<Reference> {
             self.prebuilt_rels.get::<str>(&self.topic).expect("Tried to access a node that doesn't exist!")
         }
     }
     struct TestProvider {
-        prebuilt_rels: Rc<HashMap<&'static str, Vec<String>>>
+        prebuilt_rels: Rc<HashMap<&'static str, Vec<Reference>>>
     }
     impl TestProvider {
-        fn new(prebuilt_rels: Rc<HashMap<&'static str, Vec<String>>>) -> TestProvider {
-            TestProvider {prebuilt_rels: prebuilt_rels}
+        fn new(prebuilt_rels: Rc<HashMap<&'static str, Vec<Reference>>>) -> TestProvider {
+            TestProvider {prebuilt_rels}
         }
     }
     impl ArticleProvider for TestProvider {
         fn get(&self, topic: &str) -> Option<Box<Article>> {
-                let new_rels = self.prebuilt_rels.clone();
+                let new_rels: Rc<HashMap<&'static str, Vec<Reference>>> = self.prebuilt_rels.clone();
                 Some(Box::new(TestArticle::new(topic.to_owned(), new_rels)))
         }
         fn search(&self, topic: &str) -> Vec<String> {panic!("search() should not be called in this test.");}

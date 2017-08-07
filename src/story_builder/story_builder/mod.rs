@@ -5,8 +5,8 @@ pub struct StoryBuilder<'a> {
     max_depth: u8,
 }
 
-impl <'a> StoryBuilder<'a> {
-    pub fn new(article_provider: &'a ArticleProvider) -> StoryBuilder {
+impl <'a> StoryBuilder<'a>  {
+    pub fn new(article_provider: &'a ArticleProvider) -> StoryBuilder<'a> {
         StoryBuilder {
             article_provider,
             max_depth: 5, // default value for now
