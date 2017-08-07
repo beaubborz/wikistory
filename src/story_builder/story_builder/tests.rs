@@ -182,5 +182,5 @@ fn build_story_end_topic_found_in_start_article() {
     }
     let provider = TestProvider::new(prebuilt_rels.clone());
     let story_builder = StoryBuilder::new(&provider);
-    assert_eq!(story_builder.build_story("start", "end"), Ok("Paragraph with end in it.\r\n".to_owned()));
+    assert_eq!(story_builder.build_story("start", "end"), Ok("Paragraph for end.\r\n".to_owned()));
 }
