@@ -46,12 +46,14 @@ impl <'a> StoryBuilder<'a>  {
         // will be impossibly long to complete sincethe depth of the wikipedia
         // article tree is almost infinite.
 
-        // We will hold a reference to the last level of the tree we parsed.
-        // (The first level only holds the first article).
-        let last_level = vec![TreeNode::new(start_article)];
-        //for _ in 0..max_depth {
-        //    last_level = last_level.iter().map(|i| {TreeNode::new(i)}).collect();
-        //}
+        // We look for a paragraph that holds a reference to our end topic:
+        if let Some(paragraph) = start_article.get_paragraphs().iter().find(|par| {
+            // if any of the topics in the paragraph is <end>, return it.
+            par.topics.iter().any(|topic| {topic == end_topic})
+            }) {
+                // We found the paragraph; return it directly.
+            return Ok(format!("{}\r\n", &paragraph.text));
+        }
 
         Err(format!("Reached depth of <{}> without finding <{}>. Stopping search.", self.max_depth, end_topic).to_owned())
     }
