@@ -1,10 +1,10 @@
-pub struct Reference {
-    pub paragraph: String,
-    pub topic: String,
+pub struct Paragraph {
+    pub text: String,
+    pub topics: Vec<String>,
 }
 
 pub trait Article {
-    fn get_related_references(&self) -> &Vec<Reference>;
+    fn get_paragraphs(&self) -> &Vec<Paragraph>;
 }
 
 pub trait ArticleProvider {
