@@ -183,3 +183,49 @@ fn build_story_end_topic_found_in_start_article() {
     let story_builder = StoryBuilder::new(&provider);
     assert_eq!(story_builder.build_story("start", "end"), Ok("Paragraph 2\r\n".to_owned()));
 }
+
+#[test]
+/// For: build_story
+fn build_story_end_topic_found_in_second_level() {
+    let mut prebuilt_rels = Rc::new(HashMap::new());
+    Rc::get_mut(&mut prebuilt_rels).unwrap().insert("start", vec![Paragraph {text: "Paragraph 1".to_owned(), topics: vec!["topic 1".to_owned(), "topic 2".to_owned(), "topic 3".to_owned()]},
+                                                                  Paragraph {text: "Paragraph 2".to_owned(), topics: vec!["topic 4".to_owned(), "topic 2".to_owned(), "topic 4".to_owned()]},
+                                                                  Paragraph {text: "Paragraph 3".to_owned(), topics: vec!["topic 1".to_owned(), "topic 1".to_owned(), "topic 2".to_owned()]}]);
+
+    Rc::get_mut(&mut prebuilt_rels).unwrap().insert("topic 1", vec![Paragraph {text: "Paragraph 1".to_owned(), topics: vec!["topic 1".to_owned(), "topic 2".to_owned(), "topic 3".to_owned()]},
+                                                                    Paragraph {text: "Paragraph 2".to_owned(), topics: vec!["end".to_owned(), "topic 1".to_owned(), "topic 2".to_owned()]}]);
+    struct TestArticle {
+        topic: String,
+        prebuilt_rels: Rc<HashMap<&'static str, Vec<Paragraph>>>,
+    }
+
+    impl TestArticle {
+        fn new(topic: String, prebuilt_rels: Rc<HashMap<&'static str, Vec<Paragraph>>>) -> TestArticle {
+            TestArticle {topic, prebuilt_rels}
+        }
+    }
+
+    impl Article for TestArticle {
+            fn get_paragraphs(&self) -> &Vec<Paragraph> {
+            self.prebuilt_rels.get::<str>(&self.topic).expect("Tried to access a node that doesn't exist!")
+        }
+    }
+    struct TestProvider {
+        prebuilt_rels: Rc<HashMap<&'static str, Vec<Paragraph>>>
+    }
+    impl TestProvider {
+        fn new(prebuilt_rels: Rc<HashMap<&'static str, Vec<Paragraph>>>) -> TestProvider {
+            TestProvider {prebuilt_rels}
+        }
+    }
+    impl ArticleProvider for TestProvider {
+        fn get(&self, topic: &str) -> Option<Box<Article>> {
+                let new_rels: Rc<HashMap<&'static str, Vec<Paragraph>>> = self.prebuilt_rels.clone();
+                Some(Box::new(TestArticle::new(topic.to_owned(), new_rels)))
+        }
+        fn search(&self, topic: &str) -> Vec<String> {panic!("search() should not be called in this test.");}
+    }
+    let provider = TestProvider::new(prebuilt_rels.clone());
+    let story_builder = StoryBuilder::new(&provider);
+    assert_eq!(story_builder.build_story("start", "end"), Ok("Paragraph 1\r\nParagraph 2\r\n".to_owned()));
+}
