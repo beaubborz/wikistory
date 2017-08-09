@@ -57,6 +57,16 @@ impl <'a> StoryBuilder<'a>  {
                 return Ok(format!("{}\r\n", text));
             }
         }
+                   // Then, if we did not find anything, we go down one more level:
+       let last_level: Vec<Box<Article>> = last_level.iter().flat_map(|article| {
+                   /* Iterate on each paragraph of this article, then map on it to
+                      get the article for each related topic in it. */
+           article.get_paragraphs().iter().flat_map(|paragraph| {
+               paragraph.topics.iter().map(|topic| -> Box<Article> {
+                   self.article_provider.get(topic).unwrap()
+                   })
+               })
+           }).collect();
 
 
 
