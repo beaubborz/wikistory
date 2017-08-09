@@ -1,5 +1,7 @@
 use story_builder::article_provider::*;
+use std::rc::Rc;
 use std::borrow::Borrow;
+use std::ops::Deref;
 
 pub struct StoryBuilder<'a> {
     article_provider: &'a ArticleProvider,
@@ -48,26 +50,32 @@ impl <'a> StoryBuilder<'a>  {
                       article tree is almost infinite. */
                    /* We look for a paragraph that holds a reference to our end topic
                       somewhere in the last level we fetched: */
-        let mut last_level: Vec<Box<Article>> = vec![start_article]; // starts with start article
+        let mut last_level: Vec<Rc<ArticleNode>> = vec![Rc::new(ArticleNode::new(start_article))]; // starts with start article
         for i in 0..self.max_depth { // To prevent overloading the system, stop after X level deep
                        // Start by loading the next level of articles:
            if i > 0 {
                // Any other iteration: go one level deeper:
-               last_level = last_level.iter().flat_map(|article| {
+               let mut current_level = vec![];
+               for rc_article_node in last_level.iter() {
                        /* Iterate on each paragraph of this article, then map on it to
                           get the article for each related topic in it. */
-               article.get_paragraphs().iter().flat_map(|paragraph| {
-                   paragraph.topics.iter().map(|topic| -> Box<Article> {
-                       self.article_provider.get(topic).unwrap()
-                       })
-                   })
-               }).collect();
+               let rc_local = rc_article_node.clone();
+               let article = rc_local.deref();
+               for paragraph in article.get_paragraphs().iter() {
+                   for topic in paragraph.topics.iter() {
+                       let mut new_node = ArticleNode::new((&self).article_provider.get(topic).unwrap());
+                       new_node.attach_to(rc_local.clone(), &paragraph.text);
+                       current_level.push(Rc::new(new_node));
+                       }
+                   }
+               }
+               last_level = current_level; // Replace the previous level with this level.
            }
 
-           for article in last_level.iter() {
-               if let Some(text) = StoryBuilder::find_text_for_topic_in_article(article.borrow(), end_topic) {
+           for article_node in last_level.iter() {
+               if let Some(text) = StoryBuilder::find_text_for_topic_in_article(article_node.deref().deref().borrow(), end_topic) {
                    // Found the topic. Format and return.
-                   return Ok(format!("{}\r\n", text));
+                   return Ok(StoryBuilder::build_final_text(article_node.clone(), text));
                }
            }
        }
@@ -96,17 +104,67 @@ impl <'a> StoryBuilder<'a>  {
             None
         }
     }
-}
 
-struct TreeNode<T> {
-    data: T,
-}
-
-impl <T> TreeNode<T> {
-    fn new(data: T) -> TreeNode<T> {
-        TreeNode {
-            data
+    fn build_final_text(article_node: Rc<ArticleNode>, final_text: &str) -> String {
+        let mut text = String::new();
+        {
+            let n: &ArticleNode = article_node.borrow();
+            if let Some(n_text) = n.text() {
+                text.push_str(&format!("{}\r\n", n_text));
+            }
         }
+
+        let mut node = article_node;
+        loop {
+            node = match node.parent() {
+                Some(rc) => {
+                        {
+                        let n: &ArticleNode = rc.borrow();
+                        if let Some(n_text) = n.text() {
+                            text.push_str(&format!("{}\r\n", n_text));
+                        }
+                        }
+                    rc
+                    },
+                _ => break,
+            }
+        }
+        text.push_str(&format!("{}\r\n", final_text));
+        text
+    }
+}
+
+struct ArticleNode {
+    data: Box<Article>,
+    parent: Option<Rc<ArticleNode>>,
+    text: Option<String>,
+}
+
+impl ArticleNode {
+    fn new(data: Box<Article>) -> ArticleNode {
+        ArticleNode {
+            data,
+            parent: None,
+            text: None,
+        }
+    }
+    fn attach_to(&mut self, parent: Rc<ArticleNode>, paragraph_text: &str) {
+        self.parent = Some(parent);
+        self.text = Some(String::from(paragraph_text));
+    }
+    fn parent(&self) -> Option<Rc<ArticleNode>> {
+        self.parent.clone()
+    }
+    fn text(&self) -> Option<String> {
+        self.text.clone()
+    }
+}
+
+impl <'n> Deref for ArticleNode {
+    type Target = Box<Article>;
+
+    fn deref(&self) -> &Box<Article> {
+        &self.data
     }
 }
 
