@@ -1,4 +1,5 @@
-use story_builder::article_provider::ArticleProvider;
+use story_builder::article_provider::*;
+use std::borrow::Borrow;
 
 pub struct StoryBuilder<'a> {
     article_provider: &'a ArticleProvider,
@@ -49,14 +50,14 @@ impl <'a> StoryBuilder<'a>  {
                    // Initialize the last level vector with the start article:
         let last_level = vec![start_article];
                    /* We look for a paragraph that holds a reference to our end topic
-                      somewhere in the last level: */
-        if let Some(paragraph) = start_article.get_paragraphs().iter().find(|par| {
-                   // if any of the topics in the paragraph is <end>, return it.
-            par.topics.iter().any(|topic| {topic == end_topic})
-            }) {
-                   // We found the paragraph; return it directly.
-            return Ok(format!("{}\r\n", &paragraph.text));
+                      somewhere in the last level we fetched: */
+        for article in last_level.iter() {
+            if let Some(text) = StoryBuilder::find_text_for_topic_in_article(article.borrow(), end_topic) {
+                // Found the topic. Format and return.
+                return Ok(format!("{}\r\n", text));
+            }
         }
+
 
 
         Err(format!("Reached depth of <{}> without finding <{}>. Stopping search.", self.max_depth, end_topic).to_owned())
@@ -69,6 +70,18 @@ impl <'a> StoryBuilder<'a>  {
         }
 
         msg
+    }
+
+    fn find_text_for_topic_in_article<'b>(article: &'b Article, topic: &str) -> Option<&'b str> {
+        if let Some(paragraph) = article.get_paragraphs().iter().find(|par| {
+                   // if any of the topics in the paragraph is <end>, return it.
+            par.topics.iter().any(|t| {t == topic})
+            }) {
+                   // We found the paragraph; return it directly.
+            return Some(&paragraph.text);
+        } else {
+            None
+        }
     }
 }
 
