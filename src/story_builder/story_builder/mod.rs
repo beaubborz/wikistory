@@ -46,28 +46,31 @@ impl <'a> StoryBuilder<'a>  {
                       the end note, we know it is the shortest path to it. Also, going depth-first
                       will be impossibly long to complete sincethe depth of the wikipedia
                       article tree is almost infinite. */
-
-                   // Initialize the last level vector with the start article:
-        let last_level = vec![start_article];
                    /* We look for a paragraph that holds a reference to our end topic
                       somewhere in the last level we fetched: */
-        for article in last_level.iter() {
-            if let Some(text) = StoryBuilder::find_text_for_topic_in_article(article.borrow(), end_topic) {
-                // Found the topic. Format and return.
-                return Ok(format!("{}\r\n", text));
-            }
-        }
-                   // Then, if we did not find anything, we go down one more level:
-       let last_level: Vec<Box<Article>> = last_level.iter().flat_map(|article| {
-                   /* Iterate on each paragraph of this article, then map on it to
-                      get the article for each related topic in it. */
-           article.get_paragraphs().iter().flat_map(|paragraph| {
-               paragraph.topics.iter().map(|topic| -> Box<Article> {
-                   self.article_provider.get(topic).unwrap()
+        let mut last_level: Vec<Box<Article>> = vec![start_article]; // starts with start article
+        for i in 0..self.max_depth { // To prevent overloading the system, stop after X level deep
+                       // Start by loading the next level of articles:
+           if i > 0 {
+               // Any other iteration: go one level deeper:
+               last_level = last_level.iter().flat_map(|article| {
+                       /* Iterate on each paragraph of this article, then map on it to
+                          get the article for each related topic in it. */
+               article.get_paragraphs().iter().flat_map(|paragraph| {
+                   paragraph.topics.iter().map(|topic| -> Box<Article> {
+                       self.article_provider.get(topic).unwrap()
+                       })
                    })
-               })
-           }).collect();
+               }).collect();
+           }
 
+           for article in last_level.iter() {
+               if let Some(text) = StoryBuilder::find_text_for_topic_in_article(article.borrow(), end_topic) {
+                   // Found the topic. Format and return.
+                   return Ok(format!("{}\r\n", text));
+               }
+           }
+       }
 
 
         Err(format!("Reached depth of <{}> without finding <{}>. Stopping search.", self.max_depth, end_topic).to_owned())
