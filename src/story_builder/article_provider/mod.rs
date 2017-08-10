@@ -13,3 +13,5 @@ pub trait ArticleProvider {
     /// Returns a Vector of topics that might be related to the topic entered.
     fn search(&self, topic: &str) -> Vec<String>;
 }
+
+pub mod http_article_provider;

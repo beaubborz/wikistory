@@ -16,7 +16,7 @@ impl <'a> StoryBuilder<'a>  {
         }
     }
 
-    fn build_story(&self, start_topic: &str , end_topic: &str) -> Result<String, String> {
+    pub fn build_story(&self, start_topic: &str , end_topic: &str) -> Result<String, String> {
                    // If one of the topics is an empty string, do not try to make a story out of it.
         if start_topic == "" {
             return Err("Missing start topic.".to_owned());
