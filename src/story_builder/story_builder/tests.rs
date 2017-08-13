@@ -1,7 +1,7 @@
 use story_builder::story_builder::*;
 use story_builder::article_provider::*;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 static EXPECTED_SUGGESTION: &'static str = "Cannot find wikipedia article for <not-found>, try one of the following suggestions:\r\n\
 - Suggestion 1\r\n\
@@ -14,7 +14,7 @@ fn build_suggestions_msg_is_working() {
     struct TestProvider {}
     impl ArticleProvider for TestProvider {
         #[allow(unused_variables)]
-        fn get(&self, topic: &str) -> Option<Box<Article>> {
+        fn get(&self, topic: &str) -> Option<Box<Article + Send>> {
             panic!("get() should never be called in this test.");
         }
         #[allow(unused_variables)]
@@ -41,7 +41,7 @@ fn build_story_cannot_find_first_article_suggest() {
     }
     struct TestProvider {}
     impl ArticleProvider for TestProvider {
-        fn get(&self, topic: &str) -> Option<Box<Article>> {
+        fn get(&self, topic: &str) -> Option<Box<Article + Send>> {
             if topic == "found" {
                 Some(Box::new(TestArticle {topics: vec![]}))
             }
@@ -73,7 +73,7 @@ fn build_story_cannot_find_second_article_suggest() {
     }
     struct TestProvider {}
     impl ArticleProvider for TestProvider {
-        fn get(&self, topic: &str) -> Option<Box<Article>> {
+        fn get(&self, topic: &str) -> Option<Box<Article + Send>> {
             if topic == "found"
                 {Some(Box::new(TestArticle {topics: vec![]}))}
             else
@@ -98,7 +98,7 @@ fn build_story_from_same_start_and_end_should_err() {
     struct TestProvider {}
     impl ArticleProvider for TestProvider {
         #[allow(unused_variables)]
-        fn get(&self, topic: &str) -> Option<Box<Article>> {panic!("get() should not get called in this test.")}
+        fn get(&self, topic: &str) -> Option<Box<Article + Send>> {panic!("get() should not get called in this test.")}
         #[allow(unused_variables)]
         fn search(&self, topic: &str) -> Vec<String> {panic!("get() should not get called in this test.")}
     }
@@ -114,7 +114,7 @@ fn build_story_empty_start_topic_should_err() {
     struct TestProvider {}
     impl ArticleProvider for TestProvider {
         #[allow(unused_variables)]
-        fn get(&self, topic: &str) -> Option<Box<Article>> {panic!("get() should not get called in this test.")}
+        fn get(&self, topic: &str) -> Option<Box<Article + Send>> {panic!("get() should not get called in this test.")}
         #[allow(unused_variables)]
         fn search(&self, topic: &str) -> Vec<String> {panic!("get() should not get called in this test.")}
     }
@@ -130,7 +130,7 @@ fn build_story_empty_end_topic_should_err() {
     struct TestProvider {}
     impl ArticleProvider for TestProvider {
         #[allow(unused_variables)]
-        fn get(&self, topic: &str) -> Option<Box<Article>> {panic!("get() should not get called in this test.")}
+        fn get(&self, topic: &str) -> Option<Box<Article + Send>> {panic!("get() should not get called in this test.")}
         #[allow(unused_variables)]
         fn search(&self, topic: &str) -> Vec<String> {panic!("get() should not get called in this test.")}
     }
@@ -144,17 +144,17 @@ fn build_story_empty_end_topic_should_err() {
 #[test]
 /// For: build_story
 fn build_story_end_topic_found_in_start_article() {
-    let mut prebuilt_rels = Rc::new(HashMap::new());
-    Rc::get_mut(&mut prebuilt_rels).unwrap().insert("start", vec![Paragraph {text: "Paragraph 1".to_owned(), topics: vec!["topic 1".to_owned(), "topic 2".to_owned(), "topic 3".to_owned()]},
+    let mut prebuilt_rels = Arc::new(HashMap::new());
+    Arc::get_mut(&mut prebuilt_rels).unwrap().insert("start", vec![Paragraph {text: "Paragraph 1".to_owned(), topics: vec!["topic 1".to_owned(), "topic 2".to_owned(), "topic 3".to_owned()]},
                                                                   Paragraph {text: "Paragraph 2".to_owned(), topics: vec!["topic 3".to_owned(), "END".to_owned(), "topic 5".to_owned()]},
                                                                   Paragraph {text: "Paragraph 3".to_owned(), topics: vec!["topic 3".to_owned(), "topic 1".to_owned(), "topic 5".to_owned()]}]);
     struct TestArticle {
         topic: String,
-        prebuilt_rels: Rc<HashMap<&'static str, Vec<Paragraph>>>,
+        prebuilt_rels: Arc<HashMap<&'static str, Vec<Paragraph>>>,
     }
 
     impl TestArticle {
-        fn new(topic: String, prebuilt_rels: Rc<HashMap<&'static str, Vec<Paragraph>>>) -> TestArticle {
+        fn new(topic: String, prebuilt_rels: Arc<HashMap<&'static str, Vec<Paragraph>>>) -> TestArticle {
             TestArticle {topic, prebuilt_rels}
         }
     }
@@ -165,16 +165,16 @@ fn build_story_end_topic_found_in_start_article() {
         }
     }
     struct TestProvider {
-        prebuilt_rels: Rc<HashMap<&'static str, Vec<Paragraph>>>
+        prebuilt_rels: Arc<HashMap<&'static str, Vec<Paragraph>>>
     }
     impl TestProvider {
-        fn new(prebuilt_rels: Rc<HashMap<&'static str, Vec<Paragraph>>>) -> TestProvider {
+        fn new(prebuilt_rels: Arc<HashMap<&'static str, Vec<Paragraph>>>) -> TestProvider {
             TestProvider {prebuilt_rels}
         }
     }
     impl ArticleProvider for TestProvider {
-        fn get(&self, topic: &str) -> Option<Box<Article>> {
-                let new_rels: Rc<HashMap<&'static str, Vec<Paragraph>>> = self.prebuilt_rels.clone();
+        fn get(&self, topic: &str) -> Option<Box<Article + Send>> {
+                let new_rels: Arc<HashMap<&'static str, Vec<Paragraph>>> = self.prebuilt_rels.clone();
                 Some(Box::new(TestArticle::new(topic.to_owned(), new_rels)))
         }
         fn search(&self, topic: &str) -> Vec<String> {panic!("search() should not be called in this test.");}
@@ -187,20 +187,20 @@ fn build_story_end_topic_found_in_start_article() {
 #[test]
 /// For: build_story
 fn build_story_end_topic_found_in_second_level() {
-    let mut prebuilt_rels = Rc::new(HashMap::new());
-    Rc::get_mut(&mut prebuilt_rels).unwrap().insert("start", vec![Paragraph {text: "Paragraph 1".to_owned(), topics: vec!["topic 1".to_owned(), "topic 2".to_owned(), "topic 3".to_owned()]},
+    let mut prebuilt_rels = Arc::new(HashMap::new());
+    Arc::get_mut(&mut prebuilt_rels).unwrap().insert("start", vec![Paragraph {text: "Paragraph 1".to_owned(), topics: vec!["topic 1".to_owned(), "topic 2".to_owned(), "topic 3".to_owned()]},
                                                                   Paragraph {text: "Paragraph 2".to_owned(), topics: vec!["topic 4".to_owned(), "topic 2".to_owned(), "topic 4".to_owned()]},
                                                                   Paragraph {text: "Paragraph 3".to_owned(), topics: vec!["topic 1".to_owned(), "topic 1".to_owned(), "topic 2".to_owned()]}]);
 
-    Rc::get_mut(&mut prebuilt_rels).unwrap().insert("topic 1", vec![Paragraph {text: "Paragraph 1".to_owned(), topics: vec!["topic 1".to_owned(), "topic 2".to_owned(), "topic 3".to_owned()]},
+    Arc::get_mut(&mut prebuilt_rels).unwrap().insert("topic 1", vec![Paragraph {text: "Paragraph 1".to_owned(), topics: vec!["topic 1".to_owned(), "topic 2".to_owned(), "topic 3".to_owned()]},
                                                                     Paragraph {text: "Paragraph 2".to_owned(), topics: vec!["end".to_owned(), "topic 1".to_owned(), "topic 2".to_owned()]}]);
     struct TestArticle {
         topic: String,
-        prebuilt_rels: Rc<HashMap<&'static str, Vec<Paragraph>>>,
+        prebuilt_rels: Arc<HashMap<&'static str, Vec<Paragraph>>>,
     }
 
     impl TestArticle {
-        fn new(topic: String, prebuilt_rels: Rc<HashMap<&'static str, Vec<Paragraph>>>) -> TestArticle {
+        fn new(topic: String, prebuilt_rels: Arc<HashMap<&'static str, Vec<Paragraph>>>) -> TestArticle {
             TestArticle {topic, prebuilt_rels}
         }
     }
@@ -211,16 +211,16 @@ fn build_story_end_topic_found_in_second_level() {
         }
     }
     struct TestProvider {
-        prebuilt_rels: Rc<HashMap<&'static str, Vec<Paragraph>>>
+        prebuilt_rels: Arc<HashMap<&'static str, Vec<Paragraph>>>
     }
     impl TestProvider {
-        fn new(prebuilt_rels: Rc<HashMap<&'static str, Vec<Paragraph>>>) -> TestProvider {
+        fn new(prebuilt_rels: Arc<HashMap<&'static str, Vec<Paragraph>>>) -> TestProvider {
             TestProvider {prebuilt_rels}
         }
     }
     impl ArticleProvider for TestProvider {
-        fn get(&self, topic: &str) -> Option<Box<Article>> {
-                let new_rels: Rc<HashMap<&'static str, Vec<Paragraph>>> = self.prebuilt_rels.clone();
+        fn get(&self, topic: &str) -> Option<Box<Article + Send>> {
+                let new_rels: Arc<HashMap<&'static str, Vec<Paragraph>>> = self.prebuilt_rels.clone();
                 Some(Box::new(TestArticle::new(topic.to_owned(), new_rels)))
         }
         fn search(&self, topic: &str) -> Vec<String> {panic!("search() should not be called in this test.");}

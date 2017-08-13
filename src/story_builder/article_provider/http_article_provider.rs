@@ -73,6 +73,7 @@ impl HTTPArticleProvider {
             return vec![];
         }
         #[derive(Copy, Clone)]
+        #[allow(non_camel_case_types)]
         enum State {
             SEARCH_FOR_P,
             READING_P,
@@ -82,7 +83,7 @@ impl HTTPArticleProvider {
         let mut paragraphs: Vec<Paragraph> = vec![];
         let mut current_par: Option<Paragraph> = None;
 
-        for (position, tag) in htmlstream::tag_iter(body) {
+        for (_, tag) in htmlstream::tag_iter(body) {
             match (state, tag.name.as_str()) {
                 // If we are in state SEARCH_FOR_P and find a p:
                 (State::SEARCH_FOR_P, "p") => {
@@ -131,7 +132,7 @@ impl HTTPArticleProvider {
 }
 
 impl ArticleProvider for HTTPArticleProvider {
-    fn get(&self, topic: &str) -> Option<Box<Article>> {
+    fn get(&self, topic: &str) -> Option<Box<Article + Send>> {
         if topic == "" {
             return None; // Do not even try if the topic is empty.
             }
@@ -145,7 +146,7 @@ impl ArticleProvider for HTTPArticleProvider {
         }
 
         let mut content = String::new();
-        resp.read_to_string(&mut content);
+        resp.read_to_string(&mut content).expect("Could not read content from HTTP response.");
 
         Some(Box::new(HTTPArticle {
             paragraphs: HTTPArticleProvider::extract_paragraphs_from_body(&content)
@@ -158,7 +159,7 @@ impl ArticleProvider for HTTPArticleProvider {
         let mut resp = reqwest::get(&uri).unwrap();
         assert!(resp.status().is_success());
         let mut content = String::new();
-        resp.read_to_string(&mut content);
+        resp.read_to_string(&mut content).expect("Could not read content from HTTP response.");
         HTTPArticleProvider::extract_results_from_search(&content)
     }
 }

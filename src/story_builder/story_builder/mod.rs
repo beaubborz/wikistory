@@ -1,15 +1,19 @@
+extern crate crossbeam;
 use story_builder::article_provider::*;
 use std::rc::Rc;
 use std::borrow::Borrow;
 use std::ops::Deref;
+use std::sync::{Mutex, Arc};
+use story_builder::story_builder::crossbeam::ScopedJoinHandle;
+
 
 pub struct StoryBuilder<'a> {
-    article_provider: &'a ArticleProvider,
+    article_provider: &'a (ArticleProvider + Sync),
     max_depth: u8,
 }
 
 impl <'a> StoryBuilder<'a>  {
-    pub fn new(article_provider: &'a ArticleProvider) -> StoryBuilder<'a> {
+    pub fn new(article_provider: &'a (ArticleProvider + Sync)) -> StoryBuilder<'a> {
         StoryBuilder {
             article_provider,
             max_depth: 5, // default value for now
@@ -17,7 +21,8 @@ impl <'a> StoryBuilder<'a>  {
     }
 
     pub fn build_story(&self, start_topic: &str , end_topic: &str) -> Result<String, String> {
-        // If one of the topics is an empty string, do not try to make a story out of it.
+        let end_topic = &end_topic.to_lowercase();
+                   // If one of the topics is an empty string, do not try to make a story out of it.
         if start_topic == "" {
             return Err("Missing start topic.".to_owned());
         }
@@ -38,7 +43,7 @@ impl <'a> StoryBuilder<'a>  {
         };
 
         // Load the end article
-        let end_article = match self.article_provider.get(end_topic) {
+        match self.article_provider.get(end_topic) {
             Some(end_topic) => end_topic,
             None => {return Err(self.build_suggestions_msg(end_topic));},
         };
@@ -63,19 +68,21 @@ impl <'a> StoryBuilder<'a>  {
                     let article = rc_local.deref();
                     for paragraph in article.get_paragraphs().iter() {
                         // First: spawn all threads first
-                        let mut threads: Vec<JoinHandle<Article>> = Vec::new();
-                        for topic in paragraph.topics.iter() {
-                            threads.push(thread::spawn(|| {
-                                (&self).article_provider.get(topic.to_owned()).unwrap()
-                            }));
-                        }
-                        // Then, join them up one at a time.
-                        for topic in paragraph.topics.iter() {
+                        crossbeam::scope(|scope| {
+                            let mut threads: Vec<ScopedJoinHandle<Box<Article + Send>>> = Vec::new();
+                            for topic in paragraph.topics.iter() {
+                                threads.push(scope.spawn(move || {
+                                    self.article_provider.get(topic).unwrap()
+                                }));
+                            }
 
-                            let mut new_node = ArticleNode::new();
-                            new_node.attach_to(rc_local.clone(), &paragraph.text);
-                            current_level.push(Rc::new(new_node));
-                        }
+                            // Then, join them up one at a time.
+                            for t in threads.into_iter() {
+                                let mut new_node = ArticleNode::new(t.join());
+                                new_node.attach_to(rc_local.clone(), &paragraph.text);
+                                current_level.push(Rc::new(new_node));
+                            }
+                        });
                     }
                 }
                 last_level = current_level; // Replace the previous level with this level.
@@ -102,12 +109,12 @@ impl <'a> StoryBuilder<'a>  {
         msg
     }
 
-    fn find_text_for_topic_in_article<'b>(article: &'b Article, topic: &str) -> Option<&'b str> {
+    fn find_text_for_topic_in_article<'b>(article: &'b (Article + Send), topic: &str) -> Option<&'b str> {
         if let Some(paragraph) = article.get_paragraphs().iter().find(|par| {
-            // if any of the topics in the paragraph is <end>, return it.
-            par.topics.iter().any(|t| {t == topic})
-        }) {
-            // We found the paragraph; return it directly.
+                   // if any of the topics in the paragraph is <end>, return it.
+            par.topics.iter().any(|t| {&t.to_lowercase() == topic})
+            }) {
+                   // We found the paragraph; return it directly.
             return Some(&paragraph.text);
         } else {
             None
@@ -144,13 +151,13 @@ impl <'a> StoryBuilder<'a>  {
 }
 
 struct ArticleNode {
-    data: Box<Article>,
+    data: Box<Article + Send>,
     parent: Option<Rc<ArticleNode>>,
     text: Option<String>,
 }
 
 impl ArticleNode {
-    fn new(data: Box<Article>) -> ArticleNode {
+    fn new(data: Box<Article + Send>) -> ArticleNode {
         ArticleNode {
             data,
             parent: None,
@@ -170,9 +177,9 @@ impl ArticleNode {
 }
 
 impl <'n> Deref for ArticleNode {
-    type Target = Box<Article>;
+    type Target = Box<Article + Send>;
 
-    fn deref(&self) -> &Box<Article> {
+    fn deref(&self) -> &Box<Article + Send> {
         &self.data
     }
 }
