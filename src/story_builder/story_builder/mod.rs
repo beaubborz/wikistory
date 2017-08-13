@@ -17,6 +17,7 @@ impl <'a> StoryBuilder<'a>  {
     }
 
     pub fn build_story(&self, start_topic: &str , end_topic: &str) -> Result<String, String> {
+        let end_topic = &end_topic.to_lowercase();
                    // If one of the topics is an empty string, do not try to make a story out of it.
         if start_topic == "" {
             return Err("Missing start topic.".to_owned());
@@ -96,7 +97,7 @@ impl <'a> StoryBuilder<'a>  {
     fn find_text_for_topic_in_article<'b>(article: &'b Article, topic: &str) -> Option<&'b str> {
         if let Some(paragraph) = article.get_paragraphs().iter().find(|par| {
                    // if any of the topics in the paragraph is <end>, return it.
-            par.topics.iter().any(|t| {t == topic})
+            par.topics.iter().any(|t| {&t.to_lowercase() == topic})
             }) {
                    // We found the paragraph; return it directly.
             return Some(&paragraph.text);

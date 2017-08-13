@@ -146,7 +146,7 @@ fn build_story_empty_end_topic_should_err() {
 fn build_story_end_topic_found_in_start_article() {
     let mut prebuilt_rels = Rc::new(HashMap::new());
     Rc::get_mut(&mut prebuilt_rels).unwrap().insert("start", vec![Paragraph {text: "Paragraph 1".to_owned(), topics: vec!["topic 1".to_owned(), "topic 2".to_owned(), "topic 3".to_owned()]},
-                                                                  Paragraph {text: "Paragraph 2".to_owned(), topics: vec!["topic 3".to_owned(), "end".to_owned(), "topic 5".to_owned()]},
+                                                                  Paragraph {text: "Paragraph 2".to_owned(), topics: vec!["topic 3".to_owned(), "END".to_owned(), "topic 5".to_owned()]},
                                                                   Paragraph {text: "Paragraph 3".to_owned(), topics: vec!["topic 3".to_owned(), "topic 1".to_owned(), "topic 5".to_owned()]}]);
     struct TestArticle {
         topic: String,
