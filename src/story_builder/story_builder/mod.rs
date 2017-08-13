@@ -4,25 +4,29 @@ use std::rc::Rc;
 use std::borrow::Borrow;
 use std::ops::Deref;
 use std::sync::{Mutex, Arc};
-use story_builder::story_builder::crossbeam::ScopedJoinHandle;
+use std::thread;
+use std::thread::JoinHandle;
+use std::collections::HashSet;
 
-
-pub struct StoryBuilder<'a> {
-    article_provider: &'a (ArticleProvider + Sync),
+pub struct StoryBuilder {
+    article_provider: Arc<(ArticleProvider + Send + Sync)>,
     max_depth: u8,
+    visited_nodes: Arc<HashSet<String>>,
 }
 
-impl <'a> StoryBuilder<'a>  {
-    pub fn new(article_provider: &'a (ArticleProvider + Sync)) -> StoryBuilder<'a> {
+impl StoryBuilder  {
+    pub fn new(article_provider: Arc<(ArticleProvider + Send + Sync)>) -> StoryBuilder {
         StoryBuilder {
             article_provider,
             max_depth: 5, // default value for now
+            visited_nodes: Arc::new(HashSet::new()),
         }
     }
 
-    pub fn build_story(&self, start_topic: &str , end_topic: &str) -> Result<String, String> {
-        let end_topic = &end_topic.to_lowercase();
-                   // If one of the topics is an empty string, do not try to make a story out of it.
+    pub fn build_story(&mut self, start_topic: &str , end_topic: &str) -> Result<String, String> {
+        let start_topic = start_topic.to_lowercase();
+        let end_topic = end_topic.to_lowercase();
+        // If one of the topics is an empty string, do not try to make a story out of it.
         if start_topic == "" {
             return Err("Missing start topic.".to_owned());
         }
@@ -37,15 +41,15 @@ impl <'a> StoryBuilder<'a>  {
         }
 
         // Load the first article
-        let start_article = match self.article_provider.get(start_topic) {
+        let start_article = match self.article_provider.get(&start_topic) {
             Some(start_article) => start_article,
-            None => {return Err(self.build_suggestions_msg(start_topic));},
+            None => {return Err(self.build_suggestions_msg(&start_topic));},
         };
-
+        Arc::get_mut(&mut self.visited_nodes).unwrap().insert(start_topic);
         // Load the end article
-        match self.article_provider.get(end_topic) {
+        match self.article_provider.get(&end_topic) {
             Some(end_topic) => end_topic,
-            None => {return Err(self.build_suggestions_msg(end_topic));},
+            None => {return Err(self.build_suggestions_msg(&end_topic));},
         };
 
         /* To build a story, we need to build a tree starting at the start_article
@@ -68,35 +72,42 @@ impl <'a> StoryBuilder<'a>  {
                     let article = rc_local.deref();
                     for paragraph in article.get_paragraphs().iter() {
                         // First: spawn all threads first
-                        crossbeam::scope(|scope| {
-                            let mut threads: Vec<ScopedJoinHandle<Option<Box<Article + Send>>>> = Vec::new();
-                            for topic in paragraph.topics.iter() {
-                                threads.push(scope.spawn(move || {
-                                    self.article_provider.get(topic)
+                        let mut threads: Vec<JoinHandle<Option<Box<Article + Send + Sync>>>> = Vec::new();
+                        for topic in paragraph.topics.iter() {
+                            let topic = topic.to_lowercase();
+                            if !Arc::get_mut(&mut self.visited_nodes).unwrap().contains(&topic) {
+                                // Do not access the same article more than once!!
+                                let article_provider = self.article_provider.clone();
+                                let topic_for_thread = topic.to_owned();
+                                threads.push(thread::spawn(move || {
+                                    article_provider.get(&topic_for_thread)
                                 }));
+                                Arc::get_mut(&mut self.visited_nodes).unwrap().insert(topic);
+                            } else {
+                                println!("-------------- Node {} has already been visited. Skipping. --------------", &topic);
                             }
-
-                            // Then, join them up one at a time.
-                            for t in threads.into_iter() {
-                                match t.join() {
-                                    Some(content) => {
-                                        let mut new_node = ArticleNode::new(content);
-                                        new_node.attach_to(rc_local.clone(), &paragraph.text);
-                                        current_level.push(Rc::new(new_node));
-                                    },
-                                    None => (),
-                                }
+                        }
+                        // Then, join them up one at a time.
+                        for t in threads.into_iter() {
+                            match t.join().unwrap() {
+                                Some(content) => {
+                                    let mut new_node = ArticleNode::new(content);
+                                    new_node.attach_to(rc_local.clone(), &paragraph.text);
+                                    current_level.push(Rc::new(new_node));
+                                },
+                                None => (),
                             }
-                        });
+                        }
                     }
                 }
-                last_level = current_level; // Replace the previous level with this level.
+                last_level = current_level;
             }
+            // Replace the previous level with this level.
 
             for article_node in last_level.iter() {
-                if let Some(text) = StoryBuilder::find_text_for_topic_in_article(article_node.deref().deref().borrow(), end_topic) {
+                if let Some(text) = StoryBuilder::find_text_for_topic_in_article(article_node.deref().deref().borrow(), &end_topic) {
                     // Found the topic. Format and return.
-                    return Ok(StoryBuilder::build_final_text(article_node.clone(), text, end_topic));
+                    return Ok(StoryBuilder::build_final_text(article_node.clone(), text, &end_topic));
                 }
             }
         }
@@ -114,12 +125,12 @@ impl <'a> StoryBuilder<'a>  {
         msg
     }
 
-    fn find_text_for_topic_in_article<'b>(article: &'b (Article + Send), topic: &str) -> Option<&'b str> {
+    fn find_text_for_topic_in_article<'b>(article: &'b (Article + Send + Sync), topic: &str) -> Option<&'b str> {
         if let Some(paragraph) = article.get_paragraphs().iter().find(|par| {
-                   // if any of the topics in the paragraph is <end>, return it.
+            // if any of the topics in the paragraph is <end>, return it.
             par.topics.iter().any(|t| {&t.to_lowercase() == topic})
-            }) {
-                   // We found the paragraph; return it directly.
+        }) {
+            // We found the paragraph; return it directly.
             return Some(&paragraph.text);
         } else {
             None
@@ -129,7 +140,7 @@ impl <'a> StoryBuilder<'a>  {
     fn build_final_text(article_node: Rc<ArticleNode>, final_text: &str, final_topic: &str) -> String {
         let mut texts: Vec<String> = Vec::new();
         let mut last_topic = final_topic.to_owned();
-            texts.push(format!("{}\r\n", final_text));
+        texts.push(format!("{}\r\n", final_text));
         {
             let n: &ArticleNode = article_node.borrow();
             if let Some(n_text) = n.text() {
@@ -169,13 +180,13 @@ impl <'a> StoryBuilder<'a>  {
 }
 
 struct ArticleNode {
-    data: Box<Article + Send>,
+    data: Box<Article + Send + Sync>,
     parent: Option<Rc<ArticleNode>>,
     text: Option<String>,
 }
 
 impl ArticleNode {
-    fn new(data: Box<Article + Send>) -> ArticleNode {
+    fn new(data: Box<Article + Send + Sync>) -> ArticleNode {
         ArticleNode {
             data,
             parent: None,
@@ -198,9 +209,9 @@ impl ArticleNode {
 }
 
 impl <'n> Deref for ArticleNode {
-    type Target = Box<Article + Send>;
+    type Target = Box<Article + Send + Sync>;
 
-    fn deref(&self) -> &Box<Article + Send> {
+    fn deref(&self) -> &Box<Article + Send + Sync> {
         &self.data
     }
 }

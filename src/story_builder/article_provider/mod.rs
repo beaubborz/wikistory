@@ -10,7 +10,7 @@ pub trait Article {
 
 pub trait ArticleProvider {
     /// Returns a Some(Box<Article>) if the article is found, None otherwise.
-    fn get(&self, topic: &str) -> Option<Box<Article + Send>>;
+    fn get(&self, topic: &str) -> Option<Box<Article + Send + Sync>>;
     /// Returns a Vector of topics that might be related to the topic entered.
     fn search(&self, topic: &str) -> Vec<String>;
 }

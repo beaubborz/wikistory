@@ -136,7 +136,7 @@ impl HTTPArticleProvider {
 }
 
 impl ArticleProvider for HTTPArticleProvider {
-    fn get(&self, topic: &str) -> Option<Box<Article + Send>> {
+    fn get(&self, topic: &str) -> Option<Box<Article + Send + Sync>> {
         println!("{}", topic);
         if topic == "" {
             return None; // Do not even try if the topic is empty.

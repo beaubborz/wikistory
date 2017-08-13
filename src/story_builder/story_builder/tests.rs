@@ -14,7 +14,7 @@ fn build_suggestions_msg_is_working() {
     struct TestProvider {}
     impl ArticleProvider for TestProvider {
         #[allow(unused_variables)]
-        fn get(&self, topic: &str) -> Option<Box<Article + Send>> {
+        fn get(&self, topic: &str) -> Option<Box<Article + Send + Sync>> {
             panic!("get() should never be called in this test.");
         }
         #[allow(unused_variables)]
@@ -25,7 +25,7 @@ fn build_suggestions_msg_is_working() {
         }
     }
     let provider = TestProvider {};
-    let story_builder = StoryBuilder::new(&provider);
+    let mut story_builder = StoryBuilder::new(Arc::new(provider));
 
     assert_eq!(story_builder.build_suggestions_msg("not-found"), EXPECTED_SUGGESTION);
 }
@@ -42,7 +42,7 @@ fn build_story_cannot_find_first_article_suggest() {
     }
     struct TestProvider {}
     impl ArticleProvider for TestProvider {
-        fn get(&self, topic: &str) -> Option<Box<Article + Send>> {
+        fn get(&self, topic: &str) -> Option<Box<Article + Send + Sync>> {
             if topic == "found" {
                 Some(Box::new(TestArticle {topics: vec![]}))
             }
@@ -59,7 +59,7 @@ fn build_story_cannot_find_first_article_suggest() {
     }
 
     let provider = TestProvider {};
-    let story_builder = StoryBuilder::new(&provider);
+    let mut story_builder = StoryBuilder::new(Arc::new(provider));
     assert_eq!(story_builder.build_story("not-found", "found"), Err(EXPECTED_SUGGESTION.to_owned()));
 }
 
@@ -75,7 +75,7 @@ fn build_story_cannot_find_second_article_suggest() {
     }
     struct TestProvider {}
     impl ArticleProvider for TestProvider {
-        fn get(&self, topic: &str) -> Option<Box<Article + Send>> {
+        fn get(&self, topic: &str) -> Option<Box<Article + Send + Sync>> {
             if topic == "found"
                 {Some(Box::new(TestArticle {topics: vec![]}))}
             else
@@ -90,7 +90,7 @@ fn build_story_cannot_find_second_article_suggest() {
     }
 
     let provider = TestProvider {};
-    let story_builder = StoryBuilder::new(&provider);
+    let mut story_builder = StoryBuilder::new(Arc::new(provider));
     assert_eq!(story_builder.build_story("found", "not-found"), Err(EXPECTED_SUGGESTION.to_owned()));
 }
 
@@ -100,12 +100,12 @@ fn build_story_from_same_start_and_end_should_err() {
     struct TestProvider {}
     impl ArticleProvider for TestProvider {
         #[allow(unused_variables)]
-        fn get(&self, topic: &str) -> Option<Box<Article + Send>> {panic!("get() should not get called in this test.")}
+        fn get(&self, topic: &str) -> Option<Box<Article + Send + Sync>> {panic!("get() should not get called in this test.")}
         #[allow(unused_variables)]
         fn search(&self, topic: &str) -> Vec<String> {panic!("get() should not get called in this test.")}
     }
     let provider = TestProvider {};
-    let story_builder = StoryBuilder::new(&provider);
+    let mut story_builder = StoryBuilder::new(Arc::new(provider));
     assert_eq!(story_builder.build_story("similar topic", "similar topic"),
                Err("No story to build; same start and end topics.".to_owned()));
 }
@@ -116,12 +116,12 @@ fn build_story_empty_start_topic_should_err() {
     struct TestProvider {}
     impl ArticleProvider for TestProvider {
         #[allow(unused_variables)]
-        fn get(&self, topic: &str) -> Option<Box<Article + Send>> {panic!("get() should not get called in this test.")}
+        fn get(&self, topic: &str) -> Option<Box<Article + Send + Sync>> {panic!("get() should not get called in this test.")}
         #[allow(unused_variables)]
         fn search(&self, topic: &str) -> Vec<String> {panic!("get() should not get called in this test.")}
     }
     let provider = TestProvider {};
-    let story_builder = StoryBuilder::new(&provider);
+    let mut story_builder = StoryBuilder::new(Arc::new(provider));
     assert_eq!(story_builder.build_story("", "Other topic"),
                Err("Missing start topic.".to_owned()));
 }
@@ -132,12 +132,12 @@ fn build_story_empty_end_topic_should_err() {
     struct TestProvider {}
     impl ArticleProvider for TestProvider {
         #[allow(unused_variables)]
-        fn get(&self, topic: &str) -> Option<Box<Article + Send>> {panic!("get() should not get called in this test.")}
+        fn get(&self, topic: &str) -> Option<Box<Article + Send + Sync>> {panic!("get() should not get called in this test.")}
         #[allow(unused_variables)]
         fn search(&self, topic: &str) -> Vec<String> {panic!("get() should not get called in this test.")}
     }
     let provider = TestProvider {};
-    let story_builder = StoryBuilder::new(&provider);
+    let mut story_builder = StoryBuilder::new(Arc::new(provider));
     assert_eq!(story_builder.build_story("First topic", ""),
                Err("Missing end topic.".to_owned()));
 }
@@ -178,14 +178,14 @@ fn build_story_end_topic_found_in_start_article() {
         }
     }
     impl ArticleProvider for TestProvider {
-        fn get(&self, topic: &str) -> Option<Box<Article + Send>> {
+        fn get(&self, topic: &str) -> Option<Box<Article + Send + Sync>> {
                 let new_rels: Arc<HashMap<&'static str, Vec<Paragraph>>> = self.prebuilt_rels.clone();
                 Some(Box::new(TestArticle::new(topic.to_owned(), new_rels)))
         }
         fn search(&self, topic: &str) -> Vec<String> {panic!("search() should not be called in this test.");}
     }
     let provider = TestProvider::new(prebuilt_rels.clone());
-    let story_builder = StoryBuilder::new(&provider);
+    let mut story_builder = StoryBuilder::new(Arc::new(provider));
     assert_eq!(story_builder.build_story("start", "end"), Ok("-> (start to end)\r\nParagraph 2\r\n".to_owned()));
 }
 
@@ -227,13 +227,13 @@ fn build_story_end_topic_found_in_second_level() {
         }
     }
     impl ArticleProvider for TestProvider {
-        fn get(&self, topic: &str) -> Option<Box<Article + Send>> {
+        fn get(&self, topic: &str) -> Option<Box<Article + Send + Sync>> {
                 let new_rels: Arc<HashMap<&'static str, Vec<Paragraph>>> = self.prebuilt_rels.clone();
                 Some(Box::new(TestArticle::new(topic.to_owned(), new_rels)))
         }
         fn search(&self, topic: &str) -> Vec<String> {panic!("search() should not be called in this test.");}
     }
     let provider = TestProvider::new(prebuilt_rels.clone());
-    let story_builder = StoryBuilder::new(&provider);
+    let mut story_builder = StoryBuilder::new(Arc::new(provider));
     assert_eq!(story_builder.build_story("start", "end"), Ok("-> (start to topic 1)\r\nParagraph 1\r\n-> (topic 1 to end)\r\nParagraph 2\r\n".to_owned()));
 }

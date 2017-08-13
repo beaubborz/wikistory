@@ -1,6 +1,7 @@
 extern crate wikistory;
 use wikistory::story_builder::article_provider::http_article_provider::HTTPArticleProvider;
 use wikistory::story_builder::story_builder::StoryBuilder;
+use std::sync::Arc;
 
 /// The main entry point for WikiStory. It is tasked with reading user input to
 /// choose a starting and ending topic, as well as printing out results.
@@ -13,7 +14,7 @@ fn main() {
 
     println!("Wikistory will now try to generate a story from <{}> to <{}>: ", first_topic, end_topic);
     let provider = HTTPArticleProvider::new();
-    let sb = StoryBuilder::new(&provider);
+    let mut sb = StoryBuilder::new(Arc::new(provider));
     match sb.build_story(&first_topic, &end_topic) {
      Ok(text) => println!("{}", text),
      Err(err) => println!("{}", err),
