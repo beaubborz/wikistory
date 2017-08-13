@@ -69,18 +69,23 @@ impl <'a> StoryBuilder<'a>  {
                     for paragraph in article.get_paragraphs().iter() {
                         // First: spawn all threads first
                         crossbeam::scope(|scope| {
-                            let mut threads: Vec<ScopedJoinHandle<Box<Article + Send>>> = Vec::new();
+                            let mut threads: Vec<ScopedJoinHandle<Option<Box<Article + Send>>>> = Vec::new();
                             for topic in paragraph.topics.iter() {
                                 threads.push(scope.spawn(move || {
-                                    self.article_provider.get(topic).unwrap()
+                                    self.article_provider.get(topic)
                                 }));
                             }
 
                             // Then, join them up one at a time.
                             for t in threads.into_iter() {
-                                let mut new_node = ArticleNode::new(t.join());
-                                new_node.attach_to(rc_local.clone(), &paragraph.text);
-                                current_level.push(Rc::new(new_node));
+                                match t.join() {
+                                    Some(content) => {
+                                        let mut new_node = ArticleNode::new(content);
+                                        new_node.attach_to(rc_local.clone(), &paragraph.text);
+                                        current_level.push(Rc::new(new_node));
+                                    },
+                                    None => (),
+                                }
                             }
                         });
                     }
@@ -91,7 +96,7 @@ impl <'a> StoryBuilder<'a>  {
             for article_node in last_level.iter() {
                 if let Some(text) = StoryBuilder::find_text_for_topic_in_article(article_node.deref().deref().borrow(), end_topic) {
                     // Found the topic. Format and return.
-                    return Ok(StoryBuilder::build_final_text(article_node.clone(), text));
+                    return Ok(StoryBuilder::build_final_text(article_node.clone(), text, end_topic));
                 }
             }
         }
@@ -121,12 +126,17 @@ impl <'a> StoryBuilder<'a>  {
         }
     }
 
-    fn build_final_text(article_node: Rc<ArticleNode>, final_text: &str) -> String {
-        let mut text = String::new();
+    fn build_final_text(article_node: Rc<ArticleNode>, final_text: &str, final_topic: &str) -> String {
+        let mut texts: Vec<String> = Vec::new();
+        let mut last_topic = final_topic.to_owned();
+            texts.push(format!("{}\r\n", final_text));
         {
             let n: &ArticleNode = article_node.borrow();
             if let Some(n_text) = n.text() {
-                text.push_str(&format!("{}\r\n", n_text));
+                let new_topic = n.get_topic().to_owned();
+                texts.push(format!("-> ({} to {})\r\n", &new_topic, last_topic));
+                last_topic = new_topic;
+                texts.push(format!("{}\r\n", n_text));
             }
         }
 
@@ -137,16 +147,24 @@ impl <'a> StoryBuilder<'a>  {
                     {
                         let n: &ArticleNode = rc.borrow();
                         if let Some(n_text) = n.text() {
-                            text.push_str(&format!("{}\r\n", n_text));
+                            let new_topic = n.get_topic().to_owned();
+                            texts.push(format!("-> ({} to {})\r\n", &new_topic, last_topic));
+                            last_topic = new_topic;
+                            texts.push(format!("{}\r\n", n_text));
                         }
                     }
                     rc
                 },
-                _ => break,
+                _ => {
+                    let new_topic = node.get_topic().to_owned();
+                    texts.push(format!("-> ({} to {})\r\n", &new_topic, last_topic));
+                    return texts.into_iter().rev().collect();
+                },
             }
         }
-        text.push_str(&format!("{}\r\n", final_text));
-        text
+
+
+        texts.into_iter().rev().collect()
     }
 }
 
@@ -173,6 +191,9 @@ impl ArticleNode {
     }
     fn text(&self) -> Option<String> {
         self.text.clone()
+    }
+    fn topic(&self) -> &str {
+        self.data.get_topic()
     }
 }
 

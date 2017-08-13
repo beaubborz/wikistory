@@ -6,11 +6,15 @@ use self::htmlstream::HTMLTagState;
 
 struct HTTPArticle {
     paragraphs: Vec<Paragraph>,
+    topic: String,
 }
 
 impl Article for HTTPArticle {
     fn get_paragraphs(&self) -> &Vec<Paragraph> {
         &self.paragraphs
+    }
+    fn get_topic(&self) -> &str {
+        &self.topic
     }
 }
 
@@ -102,7 +106,7 @@ impl HTTPArticleProvider {
                 (State::READING_P, "a") => {
                     // Try to find the title of the reference:
                     for (_, attr) in htmlstream::attr_iter(&tag.attributes) {
-                        if attr.name == "title" {
+                        if (attr.name == "title") && (!attr.value.contains(":")) {
                             &current_par.as_mut().unwrap().topics.push(attr.value);
                         }
                     }
@@ -133,6 +137,7 @@ impl HTTPArticleProvider {
 
 impl ArticleProvider for HTTPArticleProvider {
     fn get(&self, topic: &str) -> Option<Box<Article + Send>> {
+        println!("{}", topic);
         if topic == "" {
             return None; // Do not even try if the topic is empty.
             }
@@ -149,7 +154,8 @@ impl ArticleProvider for HTTPArticleProvider {
         resp.read_to_string(&mut content).expect("Could not read content from HTTP response.");
 
         Some(Box::new(HTTPArticle {
-            paragraphs: HTTPArticleProvider::extract_paragraphs_from_body(&content)
+            paragraphs: HTTPArticleProvider::extract_paragraphs_from_body(&content),
+            topic: topic.to_owned(),
         }))
     }
 

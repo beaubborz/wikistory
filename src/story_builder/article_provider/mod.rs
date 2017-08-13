@@ -5,6 +5,7 @@ pub struct Paragraph {
 
 pub trait Article {
     fn get_paragraphs(&self) -> &Vec<Paragraph>;
+    fn get_topic(&self) -> &str;
 }
 
 pub trait ArticleProvider {

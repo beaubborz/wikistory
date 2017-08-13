@@ -38,6 +38,7 @@ fn build_story_cannot_find_first_article_suggest() {
     }
     impl Article for TestArticle {
         fn get_paragraphs(&self) -> &Vec<Paragraph> {&self.topics}
+        fn get_topic(&self) -> &str {panic!("get_topic() should not be called")}
     }
     struct TestProvider {}
     impl ArticleProvider for TestProvider {
@@ -70,6 +71,7 @@ fn build_story_cannot_find_second_article_suggest() {
     }
     impl Article for TestArticle {
         fn get_paragraphs(&self) -> &Vec<Paragraph> {&self.topics}
+        fn get_topic(&self) -> &str {panic!("get_topic() should not be called")}
     }
     struct TestProvider {}
     impl ArticleProvider for TestProvider {
@@ -160,8 +162,11 @@ fn build_story_end_topic_found_in_start_article() {
     }
 
     impl Article for TestArticle {
-            fn get_paragraphs(&self) -> &Vec<Paragraph> {
+        fn get_paragraphs(&self) -> &Vec<Paragraph> {
             self.prebuilt_rels.get::<str>(&self.topic).expect("Tried to access a node that doesn't exist!")
+        }
+        fn get_topic(&self) -> &str {
+            &self.topic
         }
     }
     struct TestProvider {
@@ -181,7 +186,7 @@ fn build_story_end_topic_found_in_start_article() {
     }
     let provider = TestProvider::new(prebuilt_rels.clone());
     let story_builder = StoryBuilder::new(&provider);
-    assert_eq!(story_builder.build_story("start", "end"), Ok("Paragraph 2\r\n".to_owned()));
+    assert_eq!(story_builder.build_story("start", "end"), Ok("-> (start to end)\r\nParagraph 2\r\n".to_owned()));
 }
 
 #[test]
@@ -209,6 +214,9 @@ fn build_story_end_topic_found_in_second_level() {
             fn get_paragraphs(&self) -> &Vec<Paragraph> {
             self.prebuilt_rels.get::<str>(&self.topic).expect("Tried to access a node that doesn't exist!")
         }
+        fn get_topic(&self) -> &str {
+            &self.topic
+        }
     }
     struct TestProvider {
         prebuilt_rels: Arc<HashMap<&'static str, Vec<Paragraph>>>
@@ -227,5 +235,5 @@ fn build_story_end_topic_found_in_second_level() {
     }
     let provider = TestProvider::new(prebuilt_rels.clone());
     let story_builder = StoryBuilder::new(&provider);
-    assert_eq!(story_builder.build_story("start", "end"), Ok("Paragraph 1\r\nParagraph 2\r\n".to_owned()));
+    assert_eq!(story_builder.build_story("start", "end"), Ok("-> (start to topic 1)\r\nParagraph 1\r\n-> (topic 1 to end)\r\nParagraph 2\r\n".to_owned()));
 }
