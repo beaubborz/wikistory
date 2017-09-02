@@ -172,9 +172,6 @@ impl StoryBuilder  {
                 },
             }
         }
-
-
-        texts.into_iter().rev().collect()
     }
 }
 
@@ -201,9 +198,6 @@ impl ArticleNode {
     }
     fn text(&self) -> Option<String> {
         self.text.clone()
-    }
-    fn topic(&self) -> &str {
-        self.data.get_topic()
     }
 }
 
