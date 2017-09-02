@@ -1,9 +1,8 @@
-extern crate crossbeam;
 use story_builder::article_provider::*;
 use std::rc::Rc;
 use std::borrow::Borrow;
 use std::ops::Deref;
-use std::sync::{Mutex, Arc};
+use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
 use std::collections::HashSet;
