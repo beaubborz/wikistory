@@ -82,8 +82,6 @@ impl StoryBuilder  {
                                     article_provider.get(&topic_for_thread)
                                 }));
                                 Arc::get_mut(&mut self.visited_nodes).unwrap().insert(topic);
-                            } else {
-                                println!("-------------- Node {} has already been visited. Skipping. --------------", &topic);
                             }
                         }
                         // Then, join them up one at a time.

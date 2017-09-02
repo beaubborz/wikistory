@@ -1,0 +1,4 @@
+Time for running measure-command {./wikistory.exe cat montreal} on different versions and config. Used to track performance increases:
+
+:: Initial HTML Article Provider - WITH println!() progress display:     19.295 sec
+:: Initial HTML Article Provider - WITHOUT println!() progress display:  18.354 sec
