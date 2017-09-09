@@ -10,7 +10,7 @@ use std::collections::HashSet;
 pub struct StoryBuilder {
     article_provider: Arc<(ArticleProvider + Send + Sync)>,
     max_depth: u8,
-    visited_nodes: Arc<HashSet<String>>,
+    visited_nodes: HashSet<String>,
 }
 
 impl StoryBuilder  {
@@ -18,7 +18,7 @@ impl StoryBuilder  {
         StoryBuilder {
             article_provider,
             max_depth: 5, // default value for now
-            visited_nodes: Arc::new(HashSet::new()),
+            visited_nodes: HashSet::new(),
         }
     }
 
@@ -44,7 +44,7 @@ impl StoryBuilder  {
             Some(start_article) => start_article,
             None => {return Err(self.build_suggestions_msg(&start_topic));},
         };
-        Arc::get_mut(&mut self.visited_nodes).unwrap().insert(start_topic);
+        self.visited_nodes.insert(start_topic);
         // Load the end article
         match self.article_provider.get(&end_topic) {
             Some(end_topic) => end_topic,
@@ -74,14 +74,14 @@ impl StoryBuilder  {
                         let mut threads: Vec<JoinHandle<Option<Box<Article + Send + Sync>>>> = Vec::new();
                         for topic in paragraph.topics.iter() {
                             let topic = topic.to_lowercase();
-                            if !Arc::get_mut(&mut self.visited_nodes).unwrap().contains(&topic) {
+                            if !self.visited_nodes.contains(&topic) {
                                 // Do not access the same article more than once!!
                                 let article_provider = self.article_provider.clone();
                                 let topic_for_thread = topic.to_owned();
                                 threads.push(thread::spawn(move || {
                                     article_provider.get(&topic_for_thread)
                                 }));
-                                Arc::get_mut(&mut self.visited_nodes).unwrap().insert(topic);
+                                self.visited_nodes.insert(topic);
                             }
                         }
                         // Then, join them up one at a time.
