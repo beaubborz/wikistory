@@ -3,3 +3,4 @@ Time for running measure-command {./wikistory.exe cat montreal} on different ver
 :: Initial HTML Article Provider - WITH println!() progress display:     19 sec
 :: Initial HTML Article Provider - WITHOUT println!() progress display:  18 sec
 :: Removing Arc from visited_node hashmap:                               18 sec
+:: Spawning thread in the article loop instead of paragraph               6 sec

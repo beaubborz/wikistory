@@ -67,35 +67,35 @@ impl StoryBuilder  {
                 for rc_article_node in last_level.iter() {
                     /* Iterate on each paragraph of this article, then map on it to
                        get the article for each related topic in it. */
-                    let rc_local = rc_article_node.clone();
-                    let article = rc_local.deref();
-                    for paragraph in article.get_paragraphs().iter() {
-                        // First: spawn all threads first
-                        let mut threads: Vec<JoinHandle<Option<Box<Article + Send + Sync>>>> = Vec::new();
+                    // First: spawn all threads first
+                    let mut threads: Vec<JoinHandle<(String, Option<Box<Article + Send + Sync>>)>> = Vec::new();
+                    for paragraph in rc_article_node.deref().get_paragraphs().iter() {
                         for topic in paragraph.topics.iter() {
                             let topic = topic.to_lowercase();
-                            if !self.visited_nodes.contains(&topic) {
                                 // Do not access the same article more than once!!
+                            if !self.visited_nodes.contains(&topic) {
                                 let article_provider = self.article_provider.clone();
-                                let topic_for_thread = topic.to_owned();
+                                let topic_for_thread = topic.clone();
+                                let par_text = paragraph.text.clone();
                                 threads.push(thread::spawn(move || {
-                                    article_provider.get(&topic_for_thread)
+                                    (par_text, article_provider.get(&topic_for_thread))
                                 }));
                                 self.visited_nodes.insert(topic);
                             }
                         }
-                        // Then, join them up one at a time.
-                        for t in threads.into_iter() {
-                            match t.join().unwrap() {
-                                Some(content) => {
-                                    let mut new_node = ArticleNode::new(content);
-                                    new_node.attach_to(rc_local.clone(), &paragraph.text);
-                                    current_level.push(Rc::new(new_node));
-                                },
-                                None => (),
-                            }
+                    }
+                    // Then, join them up one at a time.
+                    for t in threads.into_iter() {
+                        match t.join().unwrap() {
+                            (source_paragraph, Some(a)) => {
+                                let mut new_node = ArticleNode::new(a);
+                                new_node.attach_to(rc_article_node.clone(), source_paragraph);
+                                current_level.push(Rc::new(new_node));
+                            },
+                            (_, None) => (),
                         }
                     }
+                    println!("Done.");
                 }
                 last_level = current_level;
             }
@@ -187,9 +187,9 @@ impl ArticleNode {
             text: None,
         }
     }
-    fn attach_to(&mut self, parent: Rc<ArticleNode>, paragraph_text: &str) {
+    fn attach_to(&mut self, parent: Rc<ArticleNode>, paragraph_text: String) {
         self.parent = Some(parent);
-        self.text = Some(String::from(paragraph_text));
+        self.text = Some(paragraph_text);
     }
     fn parent(&self) -> Option<Rc<ArticleNode>> {
         self.parent.clone()
