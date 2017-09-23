@@ -102,7 +102,6 @@ impl StoryBuilder {
                             (_, None) => (),
                         }
                     }
-                    println!("Done.");
                 }
                 last_level = current_level;
             }
