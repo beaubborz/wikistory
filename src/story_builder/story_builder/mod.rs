@@ -13,7 +13,7 @@ pub struct StoryBuilder {
     visited_nodes: HashSet<String>,
 }
 
-impl StoryBuilder  {
+impl StoryBuilder {
     pub fn new(article_provider: Arc<(ArticleProvider + Send + Sync)>) -> StoryBuilder {
         StoryBuilder {
             article_provider,
@@ -22,7 +22,7 @@ impl StoryBuilder  {
         }
     }
 
-    pub fn build_story(&mut self, start_topic: &str , end_topic: &str) -> Result<String, String> {
+    pub fn build_story(&mut self, start_topic: &str, end_topic: &str) -> Result<String, String> {
         let start_topic = start_topic.to_lowercase();
         let end_topic = end_topic.to_lowercase();
         // If one of the topics is an empty string, do not try to make a story out of it.
@@ -42,13 +42,17 @@ impl StoryBuilder  {
         // Load the first article
         let start_article = match self.article_provider.get(&start_topic) {
             Some(start_article) => start_article,
-            None => {return Err(self.build_suggestions_msg(&start_topic));},
+            None => {
+                return Err(self.build_suggestions_msg(&start_topic));
+            }
         };
         self.visited_nodes.insert(start_topic);
         // Load the end article
         match self.article_provider.get(&end_topic) {
             Some(end_topic) => end_topic,
-            None => {return Err(self.build_suggestions_msg(&end_topic));},
+            None => {
+                return Err(self.build_suggestions_msg(&end_topic));
+            }
         };
 
         /* To build a story, we need to build a tree starting at the start_article
@@ -59,7 +63,8 @@ impl StoryBuilder  {
         /* We look for a paragraph that holds a reference to our end topic
            somewhere in the last level we fetched: */
         let mut last_level: Vec<Rc<ArticleNode>> = vec![Rc::new(ArticleNode::new(start_article))]; // starts with start article
-        for i in 0..self.max_depth { // To prevent overloading the system, stop after X level deep
+        for i in 0..self.max_depth {
+            // To prevent overloading the system, stop after X level deep
             // Start by loading the next level of articles:
             if i > 0 {
                 // Any other iteration: go one level deeper:
@@ -68,18 +73,20 @@ impl StoryBuilder  {
                     /* Iterate on each paragraph of this article, then map on it to
                        get the article for each related topic in it. */
                     // First: spawn all threads first
-                    let mut threads: Vec<JoinHandle<(String, Option<Box<Article + Send + Sync>>)>> = Vec::new();
+                    let mut threads: Vec<
+                        JoinHandle<(String, Option<Box<Article + Send + Sync>>)>,
+                    > = Vec::new();
                     for paragraph in rc_article_node.deref().get_paragraphs().iter() {
                         for topic in paragraph.topics.iter() {
                             let topic = topic.to_lowercase();
-                                // Do not access the same article more than once!!
+                            // Do not access the same article more than once!!
                             if !self.visited_nodes.contains(&topic) {
                                 let article_provider = self.article_provider.clone();
                                 let topic_for_thread = topic.clone();
                                 let par_text = paragraph.text.clone();
-                                threads.push(thread::spawn(move || {
-                                    (par_text, article_provider.get(&topic_for_thread))
-                                }));
+                                threads.push(thread::spawn(
+                                    move || (par_text, article_provider.get(&topic_for_thread)),
+                                ));
                                 self.visited_nodes.insert(topic);
                             }
                         }
@@ -91,7 +98,7 @@ impl StoryBuilder  {
                                 let mut new_node = ArticleNode::new(a);
                                 new_node.attach_to(rc_article_node.clone(), source_paragraph);
                                 current_level.push(Rc::new(new_node));
-                            },
+                            }
                             (_, None) => (),
                         }
                     }
@@ -102,19 +109,35 @@ impl StoryBuilder  {
             // Replace the previous level with this level.
 
             for article_node in last_level.iter() {
-                if let Some(text) = StoryBuilder::find_text_for_topic_in_article(article_node.deref().deref().borrow(), &end_topic) {
+                if let Some(text) = StoryBuilder::find_text_for_topic_in_article(
+                    article_node.deref().deref().borrow(),
+                    &end_topic,
+                ) {
                     // Found the topic. Format and return.
-                    return Ok(StoryBuilder::build_final_text(article_node.clone(), text, &end_topic));
+                    return Ok(StoryBuilder::build_final_text(
+                        article_node.clone(),
+                        text,
+                        &end_topic,
+                    ));
                 }
             }
         }
 
 
-        Err(format!("Reached depth of <{}> without finding <{}>. Stopping search.", self.max_depth, end_topic).to_owned())
+        Err(
+            format!(
+                "Reached depth of <{}> without finding <{}>. Stopping search.",
+                self.max_depth,
+                end_topic
+            ).to_owned(),
+        )
     }
 
     fn build_suggestions_msg(&self, topic: &str) -> String {
-        let mut msg = String::from(format!("Cannot find wikipedia article for <{}>, try one of the following suggestions:\r\n", topic));
+        let mut msg = String::from(format!(
+            "Cannot find wikipedia article for <{}>, try one of the following suggestions:\r\n",
+            topic
+        ));
         for sugg in self.article_provider.search(topic) {
             msg.push_str(&format!("- {}\r\n", &sugg));
         }
@@ -122,10 +145,13 @@ impl StoryBuilder  {
         msg
     }
 
-    fn find_text_for_topic_in_article<'b>(article: &'b (Article + Send + Sync), topic: &str) -> Option<&'b str> {
+    fn find_text_for_topic_in_article<'b>(
+        article: &'b (Article + Send + Sync),
+        topic: &str,
+    ) -> Option<&'b str> {
         if let Some(paragraph) = article.get_paragraphs().iter().find(|par| {
             // if any of the topics in the paragraph is <end>, return it.
-            par.topics.iter().any(|t| {&t.to_lowercase() == topic})
+            par.topics.iter().any(|t| &t.to_lowercase() == topic)
         }) {
             // We found the paragraph; return it directly.
             return Some(&paragraph.text);
@@ -134,7 +160,11 @@ impl StoryBuilder  {
         }
     }
 
-    fn build_final_text(article_node: Rc<ArticleNode>, final_text: &str, final_topic: &str) -> String {
+    fn build_final_text(
+        article_node: Rc<ArticleNode>,
+        final_text: &str,
+        final_topic: &str,
+    ) -> String {
         let mut texts: Vec<String> = Vec::new();
         let mut last_topic = final_topic.to_owned();
         texts.push(format!("{}\r\n", final_text));
@@ -162,12 +192,12 @@ impl StoryBuilder  {
                         }
                     }
                     rc
-                },
+                }
                 _ => {
                     let new_topic = node.get_topic().to_owned();
                     texts.push(format!("-> ({} to {})\r\n", &new_topic, last_topic));
                     return texts.into_iter().rev().collect();
-                },
+                }
             }
         }
     }
@@ -199,7 +229,7 @@ impl ArticleNode {
     }
 }
 
-impl <'n> Deref for ArticleNode {
+impl<'n> Deref for ArticleNode {
     type Target = Box<Article + Send + Sync>;
 
     fn deref(&self) -> &Box<Article + Send + Sync> {

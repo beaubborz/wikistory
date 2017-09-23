@@ -9,15 +9,22 @@ fn main() {
     let args_vec: Vec<String> = std::env::args().collect();
     let (first_topic, end_topic) = match extract_topics_from_args_vec(&args_vec) {
         Ok(items) => items,
-        Err(msg) => {println!("{}", msg); return;},
+        Err(msg) => {
+            println!("{}", msg);
+            return;
+        }
     };
 
-    println!("Wikistory will now try to generate a story from <{}> to <{}>: ", first_topic, end_topic);
+    println!(
+        "Wikistory will now try to generate a story from <{}> to <{}>: ",
+        first_topic,
+        end_topic
+    );
     let provider = HTTPArticleProvider::new();
     let mut sb = StoryBuilder::new(Arc::new(provider));
     match sb.build_story(&first_topic, &end_topic) {
-     Ok(text) => println!("{}", text),
-     Err(err) => println!("{}", err),
+        Ok(text) => println!("{}", text),
+        Err(err) => println!("{}", err),
     };
 }
 

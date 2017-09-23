@@ -1,5 +1,5 @@
-extern crate reqwest;
 extern crate htmlstream;
+extern crate reqwest;
 use story_builder::article_provider::*;
 use std::io::Read;
 use self::htmlstream::HTMLTagState;
@@ -25,7 +25,7 @@ pub struct HTTPArticleProvider {
 
 impl HTTPArticleProvider {
     pub fn new() -> HTTPArticleProvider {
-        HTTPArticleProvider{
+        HTTPArticleProvider {
             base_uri_for_get: "https://en.wikipedia.org/wiki/",
             base_uri_for_search: "https://en.wikipedia.org/w/index.php?title=Special:Search&fulltext=1&search=",
         }
@@ -46,7 +46,7 @@ impl HTTPArticleProvider {
                 let mut title: Option<String> = None;
                 let mut href: Option<String> = None;
                 let mut has_data_serp_pos: bool = false;
-                for(_, attr) in htmlstream::attr_iter(&tag.attributes) {
+                for (_, attr) in htmlstream::attr_iter(&tag.attributes) {
                     match attr.name.as_str() {
                         "title" => title = Some(attr.value),
                         "href" => href = Some(attr.value),
@@ -57,10 +57,8 @@ impl HTTPArticleProvider {
                 // check if the <a> was valid:
                 if has_data_serp_pos {
                     match (title, href) {
-                        (Some(title), Some(href)) => {
-                            if &href[..6] == "/wiki/" {
-                                results.push(title);
-                            }
+                        (Some(title), Some(href)) => if &href[..6] == "/wiki/" {
+                            results.push(title);
                         },
                         _ => (),
                     };
@@ -97,11 +95,11 @@ impl HTTPArticleProvider {
                         topics: vec![],
                     });
                     state = State::READING_P; // Switch to READING_P state.
-                },
+                }
                 // IF we are in READING_P state and finds text outside of a tag, append it to the current paragraph:
                 (State::READING_P, "") => {
                     current_par.as_mut().unwrap().text.push_str(&tag.html);
-                },
+                }
                 // IF we are in READING_P state and finds an <a> tag, append it to the topic list of this paragraph:
                 (State::READING_P, "a") => {
                     // Try to find the title of the reference:
@@ -110,24 +108,23 @@ impl HTTPArticleProvider {
                             &current_par.as_mut().unwrap().topics.push(attr.value);
                         }
                     }
-                },
+                }
                 // IF we are in READING_P state and finds a <p> tag, then it is the end of the </p>;
                 // Push it in the final vector and return to the initial state.
                 (State::READING_P, "p") => {
-
                     let par = current_par.take().unwrap();
                     paragraphs.push(par);
 
                     state = State::SEARCH_FOR_P;
-                },
+                }
                 (State::READING_P, "sup") => {
                     // Enter SKIPPING_SUP state; we skip all tags until we found the corresponding </sup>
                     state = State::SKIPPING_SUP;
-                },
+                }
                 (State::SKIPPING_SUP, "sup") => {
                     // We are done skipping; back to READING_P
                     state = State::READING_P;
-                },
+                }
                 _ => (),
             };
         }
@@ -139,7 +136,7 @@ impl ArticleProvider for HTTPArticleProvider {
     fn get(&self, topic: &str) -> Option<Box<Article + Send + Sync>> {
         if topic == "" {
             return None; // Do not even try if the topic is empty.
-            }
+        }
         let mut uri = String::from(self.base_uri_for_get);
         uri.push_str(&HTTPArticleProvider::to_wiki_str(topic));
         let mut resp = reqwest::get(&uri).unwrap();
@@ -150,7 +147,8 @@ impl ArticleProvider for HTTPArticleProvider {
         }
 
         let mut content = String::new();
-        resp.read_to_string(&mut content).expect("Could not read content from HTTP response.");
+        resp.read_to_string(&mut content)
+            .expect("Could not read content from HTTP response.");
 
         Some(Box::new(HTTPArticle {
             paragraphs: HTTPArticleProvider::extract_paragraphs_from_body(&content),
@@ -164,7 +162,8 @@ impl ArticleProvider for HTTPArticleProvider {
         let mut resp = reqwest::get(&uri).unwrap();
         assert!(resp.status().is_success());
         let mut content = String::new();
-        resp.read_to_string(&mut content).expect("Could not read content from HTTP response.");
+        resp.read_to_string(&mut content)
+            .expect("Could not read content from HTTP response.");
         HTTPArticleProvider::extract_results_from_search(&content)
     }
 }
@@ -185,60 +184,70 @@ mod tests {
     // This test actually fetches search results from Wikipedia. It may FAIL due to changes in the search
     // results themselves rather than a code issue. FIXME test on locally hosted version of wikipedia
     fn search_results_works() {
-    let provider = HTTPArticleProvider::new();
-    let mut first_3_results = provider.search("test1234");
-    first_3_results.resize(3, "".to_owned());
-    let search_results_for_test1234 =  vec!["German submarine U-1234".to_owned(),
-                                            "2,3,3,3-Tetrafluoropropene".to_owned(),
-                                            "Unit testing".to_owned()];
-    assert_eq!(first_3_results, search_results_for_test1234);
+        let provider = HTTPArticleProvider::new();
+        let mut first_3_results = provider.search("test1234");
+        first_3_results.resize(3, "".to_owned());
+        let search_results_for_test1234 = vec![
+            "German submarine U-1234".to_owned(),
+            "2,3,3,3-Tetrafluoropropene".to_owned(),
+            "Unit testing".to_owned(),
+        ];
+        assert_eq!(first_3_results, search_results_for_test1234);
     }
 
     #[test]
     fn extract_results_from_empty_search() {
         let empty_vec: Vec<String> = vec![];
-        assert_eq!(HTTPArticleProvider::extract_results_from_search(""), empty_vec);
+        assert_eq!(
+            HTTPArticleProvider::extract_results_from_search(""),
+            empty_vec
+        );
     }
 
     #[test]
     fn extract_results_from_test1234() {
         let empty_vec: Vec<String> = vec![];
-        let search_results_for_test1234 =  vec!["German submarine U-1234".to_owned(),
-                                                "2,3,3,3-Tetrafluoropropene".to_owned(),
-                                                "Unit testing".to_owned()];
-        assert_eq!(HTTPArticleProvider::extract_results_from_search(
-                                    "junkblablabla\
-                                    <ul class=\"mw-search-results\">\
-                                    <li>\
-                                    <div class=\"mw-search-result-heading\">\
-                                    <a href=\"/wiki/German_submarine_U-1234\" title=\"German submarine U-1234\" data-serp-pos=\"0\">German submarine U-1234\
-                                    </a>    \
-                                    </div>\
-                                    <div class=\"searchresult\">German submarine U-1234 was a Type IXC/40 U-boat of Nazi Germany's Kriegsmarine built during World War II for service in the Battle of the Atlantic. U-1234\
-                                    </div> \
-                                    <div class=\"mw-search-result-data\">9 KB (893 words) - 19:19, 17 June 2017\
-                                    </div>\
-                                    </li>\
-                                    <li>\
-                                    <div class=\"mw-search-result-heading\">\
-                                    <a href=\"/wiki/2,3,3,3-Tetrafluoropropene\" title=\"2,3,3,3-Tetrafluoropropene\" data-serp-pos=\"1\">2,3,3,3-Tetrafluoropropene\
-                                    </a>    \
-                                    </div>\
-                                    <div class=\"searchresult\">2,3,3,3-Tetrafluoropropene, or HFO-1234yf, is a hydrofluoroolefin (HFO) with the formula CH2=CFCF3. This colorless gas has been proposed as a replacement\
-                                    </div> \
-                                    <div class=\"mw-search-result-data\">12 KB (1,291 words) - 17:02, 26 June 2017\
-                                    </div>\
-                                    </li>\
-                                    <li>\
-                                    <div class=\"mw-search-result-heading\">\
-                                    <a href=\"/wiki/Unit_testing\" title=\"Unit testing\" data-serp-pos=\"2\">Unit testing\
-                                    </a>    \
-                                    </div>\
-                                    <div class=\"searchresult\">In computer programming, unit testing is a software testing method by which individual units of source code, sets of one or more computer program modules\
-                                    </div> \
-                                    <div class=\"mw-search-result-data\">28 KB (3,455 words) - 18:46, 5 August 2017\
-                                    </div>")
-, search_results_for_test1234);
+        let search_results_for_test1234 = vec![
+            "German submarine U-1234".to_owned(),
+            "2,3,3,3-Tetrafluoropropene".to_owned(),
+            "Unit testing".to_owned(),
+        ];
+        assert_eq!(
+            HTTPArticleProvider::extract_results_from_search(
+                "junkblablabla\
+                 <ul class=\"mw-search-results\">\
+                 <li>\
+                 <div class=\"mw-search-result-heading\">\
+                 <a href=\"/wiki/German_submarine_U-1234\" title=\"German submarine U-1234\" data-serp-pos=\"0\">German submarine U-1234\
+                 </a>    \
+                 </div>\
+                 <div class=\"searchresult\">German submarine U-1234 was a Type IXC/40 U-boat of Nazi Germany's Kriegsmarine built during World War II for service in the Battle of the Atlantic. U-1234\
+                 </div> \
+                 <div class=\"mw-search-result-data\">9 KB (893 words) - 19:19, 17 June 2017\
+                 </div>\
+                 </li>\
+                 <li>\
+                 <div class=\"mw-search-result-heading\">\
+                 <a href=\"/wiki/2,3,3,3-Tetrafluoropropene\" title=\"2,3,3,3-Tetrafluoropropene\" data-serp-pos=\"1\">2,3,3,3-Tetrafluoropropene\
+                 </a>    \
+                 </div>\
+                 <div class=\"searchresult\">2,3,3,3-Tetrafluoropropene, or HFO-1234yf, is a hydrofluoroolefin (HFO) with the formula CH2=CFCF3. This colorless gas has been proposed as a replacement\
+                 </div> \
+                 <div class=\"mw-search-result-data\">12 KB (1,291 words) - 17:02, 26 June 2017\
+                 </div>\
+                 </li>\
+                 <li>\
+                 <div class=\"mw-search-result-heading\">\
+                 <a href=\"/wiki/Unit_testing\" title=\"Unit testing\" data-serp-pos=\"2\">Unit testing\
+                 </a>    \
+                 </div>\
+                 <div class=\"searchresult\">In computer programming, unit testing is a software testing method by which individual units of source code, sets of one or more computer program modules\
+                 </div> \
+                 <div class=\"mw-search-result-data\">28 KB (3,455 words) - 18:46, 5 August 2017\
+                 </div>"
+            ),
+            search_results_for_test1234
+        );
     }
 
     #[test]
@@ -290,9 +299,12 @@ mod tests {
         body.push_str("[31]</a>");
         body.push_str("</sup>");
         body.push_str("</p>");
-body.push_str("junkafter...</html>");
+        body.push_str("junkafter...</html>");
         let result = HTTPArticleProvider::extract_paragraphs_from_body(&body);
         assert!(result.len() == 1);
-        assert_eq!(result[0].text, "Lynx's most notable deep sky object is NGC 2419, also called the \"Intergalactic Wanderer\" as it was assumed to lie outside the Milky Way. At a distance of between 275,000 and 300,000 light-years from Earth, it is one of the most distant known globular clusters within our galaxy. NGC 2419 is likely in a highly elliptical orbit around the Milky Way. It has a magnitude of 10.3 and is a Shapley class II cluster; this classification indicates that it is extremely concentrated at its center. Originally thought to be a star, NGC 2419 was discovered to be a globular cluster by American astronomer Carl Lampland.");
+        assert_eq!(
+            result[0].text,
+            "Lynx's most notable deep sky object is NGC 2419, also called the \"Intergalactic Wanderer\" as it was assumed to lie outside the Milky Way. At a distance of between 275,000 and 300,000 light-years from Earth, it is one of the most distant known globular clusters within our galaxy. NGC 2419 is likely in a highly elliptical orbit around the Milky Way. It has a magnitude of 10.3 and is a Shapley class II cluster; this classification indicates that it is extremely concentrated at its center. Originally thought to be a star, NGC 2419 was discovered to be a globular cluster by American astronomer Carl Lampland."
+        );
     }
 }
