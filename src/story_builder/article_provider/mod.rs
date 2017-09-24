@@ -1,3 +1,6 @@
+pub type ThreadedAP = (ArticleProvider + Send + Sync);
+pub type ThreadedArticle = (Article + Send + Sync);
+
 pub struct Paragraph {
     pub text: String,
     pub topics: Vec<String>,

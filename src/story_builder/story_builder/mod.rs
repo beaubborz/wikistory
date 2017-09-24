@@ -1,5 +1,4 @@
 use story_builder::article_provider::*;
-use std::rc::Rc;
 use std::borrow::Borrow;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -8,13 +7,13 @@ use std::thread::JoinHandle;
 use std::collections::HashSet;
 
 pub struct StoryBuilder {
-    article_provider: Arc<(ArticleProvider + Send + Sync)>,
+    article_provider: Arc<ThreadedAP>,
     max_depth: u8,
     visited_nodes: HashSet<String>,
 }
 
 impl StoryBuilder {
-    pub fn new(article_provider: Arc<(ArticleProvider + Send + Sync)>) -> StoryBuilder {
+    pub fn new(article_provider: Arc<ThreadedAP>) -> StoryBuilder {
         StoryBuilder {
             article_provider,
             max_depth: 5, // default value for now
@@ -62,21 +61,22 @@ impl StoryBuilder {
            article tree is almost infinite. */
         /* We look for a paragraph that holds a reference to our end topic
            somewhere in the last level we fetched: */
-        let mut last_level: Vec<Rc<ArticleNode>> = vec![Rc::new(ArticleNode::new(start_article))]; // starts with start article
+
+        let mut last_level: Vec<Arc<ArticleNode>> = vec![Arc::new(ArticleNode::new(start_article))]; // starts with start article
         for i in 0..self.max_depth {
             // To prevent overloading the system, stop after X level deep
             // Start by loading the next level of articles:
             if i > 0 {
                 // Any other iteration: go one level deeper:
                 let mut current_level = vec![];
-                for rc_article_node in last_level.iter() {
+                // First: spawn all threads first
+                let mut threads: Vec<
+                    JoinHandle<(Arc<ArticleNode>, String, Option<Box<ThreadedArticle>>)>,
+                > = Vec::new();
+                for arc_article_node in last_level.iter() {
                     /* Iterate on each paragraph of this article, then map on it to
                        get the article for each related topic in it. */
-                    // First: spawn all threads first
-                    let mut threads: Vec<
-                        JoinHandle<(String, Option<Box<Article + Send + Sync>>)>,
-                    > = Vec::new();
-                    for paragraph in rc_article_node.deref().get_paragraphs().iter() {
+                    for paragraph in arc_article_node.deref().get_paragraphs().iter() {
                         for topic in paragraph.topics.iter() {
                             let topic = topic.to_lowercase();
                             // Do not access the same article more than once!!
@@ -84,25 +84,31 @@ impl StoryBuilder {
                                 let article_provider = self.article_provider.clone();
                                 let topic_for_thread = topic.clone();
                                 let par_text = paragraph.text.clone();
-                                threads.push(thread::spawn(
-                                    move || (par_text, article_provider.get(&topic_for_thread)),
-                                ));
+                                let parent_article = arc_article_node.clone();
+                                threads.push(thread::spawn(move || {
+                                    (
+                                        parent_article,
+                                        par_text,
+                                        article_provider.get(&topic_for_thread),
+                                    )
+                                }));
                                 self.visited_nodes.insert(topic);
                             }
                         }
                     }
-                    // Then, join them up one at a time.
-                    for t in threads.into_iter() {
-                        match t.join().unwrap() {
-                            (source_paragraph, Some(a)) => {
-                                let mut new_node = ArticleNode::new(a);
-                                new_node.attach_to(rc_article_node.clone(), source_paragraph);
-                                current_level.push(Rc::new(new_node));
-                            }
-                            (_, None) => (),
+                }
+                // Then, join them up one at a time.
+                for t in threads.into_iter() {
+                    match t.join().unwrap() {
+                        (parent_article, source_paragraph, Some(a)) => {
+                            let mut new_node = ArticleNode::new(a);
+                            new_node.attach_to(parent_article, source_paragraph);
+                            current_level.push(Arc::new(new_node));
                         }
+                        _ => (),
                     }
                 }
+
                 last_level = current_level;
             }
             // Replace the previous level with this level.
@@ -145,7 +151,7 @@ impl StoryBuilder {
     }
 
     fn find_text_for_topic_in_article<'b>(
-        article: &'b (Article + Send + Sync),
+        article: &'b (ThreadedArticle),
         topic: &str,
     ) -> Option<&'b str> {
         if let Some(paragraph) = article.get_paragraphs().iter().find(|par| {
@@ -160,7 +166,7 @@ impl StoryBuilder {
     }
 
     fn build_final_text(
-        article_node: Rc<ArticleNode>,
+        article_node: Arc<ArticleNode>,
         final_text: &str,
         final_topic: &str,
     ) -> String {
@@ -180,9 +186,9 @@ impl StoryBuilder {
         let mut node = article_node;
         loop {
             node = match node.parent() {
-                Some(rc) => {
+                Some(arc) => {
                     {
-                        let n: &ArticleNode = rc.borrow();
+                        let n: &ArticleNode = arc.borrow();
                         if let Some(n_text) = n.text() {
                             let new_topic = n.get_topic().to_owned();
                             texts.push(format!("-> ({} to {})\r\n", &new_topic, last_topic));
@@ -190,7 +196,7 @@ impl StoryBuilder {
                             texts.push(format!("{}\r\n", n_text));
                         }
                     }
-                    rc
+                    arc
                 }
                 _ => {
                     let new_topic = node.get_topic().to_owned();
@@ -203,24 +209,24 @@ impl StoryBuilder {
 }
 
 struct ArticleNode {
-    data: Box<Article + Send + Sync>,
-    parent: Option<Rc<ArticleNode>>,
+    data: Box<ThreadedArticle>,
+    parent: Option<Arc<ArticleNode>>,
     text: Option<String>,
 }
 
 impl ArticleNode {
-    fn new(data: Box<Article + Send + Sync>) -> ArticleNode {
+    fn new(data: Box<ThreadedArticle>) -> ArticleNode {
         ArticleNode {
             data,
             parent: None,
             text: None,
         }
     }
-    fn attach_to(&mut self, parent: Rc<ArticleNode>, paragraph_text: String) {
+    fn attach_to(&mut self, parent: Arc<ArticleNode>, paragraph_text: String) {
         self.parent = Some(parent);
         self.text = Some(paragraph_text);
     }
-    fn parent(&self) -> Option<Rc<ArticleNode>> {
+    fn parent(&self) -> Option<Arc<ArticleNode>> {
         self.parent.clone()
     }
     fn text(&self) -> Option<String> {
@@ -229,9 +235,9 @@ impl ArticleNode {
 }
 
 impl<'n> Deref for ArticleNode {
-    type Target = Box<Article + Send + Sync>;
+    type Target = Box<ThreadedArticle>;
 
-    fn deref(&self) -> &Box<Article + Send + Sync> {
+    fn deref(&self) -> &Box<ThreadedArticle> {
         &self.data
     }
 }
