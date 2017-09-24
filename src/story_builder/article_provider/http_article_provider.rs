@@ -185,14 +185,8 @@ mod tests {
     // results themselves rather than a code issue. FIXME test on locally hosted version of wikipedia
     fn search_results_works() {
         let provider = HTTPArticleProvider::new();
-        let mut first_3_results = provider.search("test1234");
-        first_3_results.resize(3, "".to_owned());
-        let search_results_for_test1234 = vec![
-            "German submarine U-1234".to_owned(),
-            "2,3,3,3-Tetrafluoropropene".to_owned(),
-            "Unit testing".to_owned(),
-        ];
-        assert_eq!(first_3_results, search_results_for_test1234);
+        let mut results = provider.search("test1234");
+        assert!(results.len() > 0);
     }
 
     #[test]
