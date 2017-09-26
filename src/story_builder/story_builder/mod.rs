@@ -105,7 +105,7 @@ impl StoryBuilder {
                     }
                 }
                 // Then, read all results:
-                /*for output in threads.iter() {
+                for output in threads.iter() {
                     match output {
                         (parent_article, source_paragraph, Some(a)) => {
                             let mut new_node = ArticleNode::new(a);
@@ -114,7 +114,7 @@ impl StoryBuilder {
                         }
                         _ => (),
                     }
-                }*/
+                }
 
                 last_level = current_level;
             }
