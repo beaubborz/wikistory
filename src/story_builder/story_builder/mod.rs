@@ -1,4 +1,5 @@
 use story_builder::article_provider::*;
+use story_builder::thread_pool::*;
 use std::borrow::Borrow;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -62,6 +63,22 @@ impl StoryBuilder {
         /* We look for a paragraph that holds a reference to our end topic
            somewhere in the last level we fetched: */
 
+        // Start by creating a thread pool:
+        let article_provider = self.article_provider.clone();
+        // Store the reference to the article provider in the job to prevent having to send
+        // it to each thread with each job request
+        struct StoryBuilderJob {article_provider: Arc<ThreadedAP>}
+        impl Job<(Arc<ArticleNode>, String, String), (Arc<ArticleNode>, String, Option<Box<ThreadedArticle>>)> for StoryBuilderJob {
+            fn step(&self, input: (Arc<ArticleNode>, String, String)) -> (Arc<ArticleNode>, String, Option<Box<ThreadedArticle>>) {
+                // Receive: reference to the parent article, paragraph being processed, topic to fetch
+                let (parent, paragraph, topic) = input;
+                // Return: ref to the parent article, paragraph, article returned from the AP
+                (parent, paragraph, self.article_provider.get(&topic))
+            }
+        }
+        let job = Arc::new(StoryBuilderJob {article_provider});
+        let mut threads = ThreadPool::new(1, job);
+
         let mut last_level: Vec<Arc<ArticleNode>> = vec![Arc::new(ArticleNode::new(start_article))]; // starts with start article
         for i in 0..self.max_depth {
             // To prevent overloading the system, stop after X level deep
@@ -69,10 +86,7 @@ impl StoryBuilder {
             if i > 0 {
                 // Any other iteration: go one level deeper:
                 let mut current_level = vec![];
-                // First: spawn all threads first
-                let mut threads: Vec<
-                    JoinHandle<(Arc<ArticleNode>, String, Option<Box<ThreadedArticle>>)>,
-                > = Vec::new();
+
                 for arc_article_node in last_level.iter() {
                     /* Iterate on each paragraph of this article, then map on it to
                        get the article for each related topic in it. */
@@ -81,25 +95,18 @@ impl StoryBuilder {
                             let topic = topic.to_lowercase();
                             // Do not access the same article more than once!!
                             if !self.visited_nodes.contains(&topic) {
-                                let article_provider = self.article_provider.clone();
                                 let topic_for_thread = topic.clone();
                                 let par_text = paragraph.text.clone();
-                                let parent_article = arc_article_node.clone();
-                                threads.push(thread::spawn(move || {
-                                    (
-                                        parent_article,
-                                        par_text,
-                                        article_provider.get(&topic_for_thread),
-                                    )
-                                }));
+                                let parent_article_node = arc_article_node.clone();
+                                threads.send((parent_article_node, par_text, topic_for_thread));
                                 self.visited_nodes.insert(topic);
                             }
                         }
                     }
                 }
-                // Then, join them up one at a time.
-                for t in threads.into_iter() {
-                    match t.join().unwrap() {
+                // Then, read all results:
+                /*for output in threads.iter() {
+                    match output {
                         (parent_article, source_paragraph, Some(a)) => {
                             let mut new_node = ArticleNode::new(a);
                             new_node.attach_to(parent_article, source_paragraph);
@@ -107,7 +114,7 @@ impl StoryBuilder {
                         }
                         _ => (),
                     }
-                }
+                }*/
 
                 last_level = current_level;
             }
