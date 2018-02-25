@@ -4,9 +4,6 @@ version = "0.1.0"
 authors = ["beaubbe <gabriel.couvrette@gmail.com>"]
 
 [dependencies]
-reqwest = "0.7.2"
-htmlstream = "0.1.2"
-
-[[bin]]
-name = "wikistory"
-path = "src/wikistory.rs"
+clap = "2.30"
+htmlstream = "0.1"
+reqwest = "0.7"
