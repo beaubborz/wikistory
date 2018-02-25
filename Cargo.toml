@@ -6,4 +6,5 @@ authors = ["beaubbe <gabriel.couvrette@gmail.com>"]
 [dependencies]
 clap = "2.30"
 htmlstream = "0.1"
+rayon = "1.0"
 reqwest = "0.7"

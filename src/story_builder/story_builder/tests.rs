@@ -254,7 +254,7 @@ fn build_story_end_topic_found_in_start_article() {
             Some(Box::new(TestArticle::new(topic.to_owned(), new_rels)))
         }
         fn search(&self, topic: &str) -> Vec<String> {
-            panic!("search() should not be called in this test.");
+            panic!("search({}) should not be called in this test.", topic);
         }
     }
     let provider = TestProvider::new(prebuilt_rels.clone());

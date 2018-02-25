@@ -143,6 +143,7 @@ impl ArticleProvider for HTTPArticleProvider {
         // IF for whatever reason we do not get an OK from wikipedia,
         // consider as "Not found" and return None.
         if resp.status() != reqwest::StatusCode::Ok {
+            println!("HTTP STATUS for URL: {}:  {:?}", &uri, resp.status());
             return None;
         }
 

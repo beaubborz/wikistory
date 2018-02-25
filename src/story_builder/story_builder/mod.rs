@@ -1,11 +1,9 @@
 use story_builder::article_provider::*;
-use story_builder::thread_pool::*;
 use std::borrow::Borrow;
 use std::ops::Deref;
-use std::sync::Arc;
-use std::thread;
-use std::thread::JoinHandle;
+use std::sync::{Arc, Mutex};
 use std::collections::HashSet;
+use rayon::prelude::*;
 
 pub struct StoryBuilder {
     article_provider: Arc<ThreadedAP>,
@@ -40,20 +38,16 @@ impl StoryBuilder {
         }
 
         // Load the first article
-        let start_article = match self.article_provider.get(&start_topic) {
-            Some(start_article) => start_article,
-            None => {
-                return Err(self.build_suggestions_msg(&start_topic));
-            }
-        };
+        let start_article = self.article_provider
+            .get(&start_topic)
+            .ok_or_else(|| self.build_suggestions_msg(&start_topic))?;
+        // Insert it in the node cache
         self.visited_nodes.insert(start_topic);
-        // Load the end article
-        match self.article_provider.get(&end_topic) {
-            Some(end_topic) => end_topic,
-            None => {
-                return Err(self.build_suggestions_msg(&end_topic));
-            }
-        };
+        // Load the end article, so an error is returned if the article does not exist (so we don't search forever for
+        // a topic that does not exist).
+        let end_article = self.article_provider
+            .get(&end_topic)
+            .ok_or_else(|| self.build_suggestions_msg(&end_topic))?;
 
         /* To build a story, we need to build a tree starting at the start_article
            node and going down in a "breadth-first" way; that way, once we find
@@ -63,21 +57,6 @@ impl StoryBuilder {
         /* We look for a paragraph that holds a reference to our end topic
            somewhere in the last level we fetched: */
 
-        // Start by creating a thread pool:
-        let article_provider = self.article_provider.clone();
-        // Store the reference to the article provider in the job to prevent having to send
-        // it to each thread with each job request
-        struct StoryBuilderJob {article_provider: Arc<ThreadedAP>}
-        impl Job<(Arc<ArticleNode>, String, String), (Arc<ArticleNode>, String, Option<Box<ThreadedArticle>>)> for StoryBuilderJob {
-            fn step(&self, input: (Arc<ArticleNode>, String, String)) -> (Arc<ArticleNode>, String, Option<Box<ThreadedArticle>>) {
-                // Receive: reference to the parent article, paragraph being processed, topic to fetch
-                let (parent, paragraph, topic) = input;
-                // Return: ref to the parent article, paragraph, article returned from the AP
-                (parent, paragraph, self.article_provider.get(&topic))
-            }
-        }
-        let job = Arc::new(StoryBuilderJob {article_provider});
-        let mut threads = ThreadPool::new(1, job);
 
         let mut last_level: Vec<Arc<ArticleNode>> = vec![Arc::new(ArticleNode::new(start_article))]; // starts with start article
         for i in 0..self.max_depth {
@@ -86,40 +65,35 @@ impl StoryBuilder {
             if i > 0 {
                 // Any other iteration: go one level deeper:
                 let mut current_level = vec![];
+                {
+                    /* Start of threaded scope */
+                    let mut current_level = Arc::new(Mutex::new(&mut current_level));
 
-                for arc_article_node in last_level.iter() {
-                    /* Iterate on each paragraph of this article, then map on it to
+                    last_level.par_iter().for_each(|article_node| {
+                        /* Iterate on each paragraph of this article, then map on it to
                        get the article for each related topic in it. */
-                    for paragraph in arc_article_node.deref().get_paragraphs().iter() {
-                        for topic in paragraph.topics.iter() {
-                            let topic = topic.to_lowercase();
-                            // Do not access the same article more than once!!
-                            if !self.visited_nodes.contains(&topic) {
-                                let topic_for_thread = topic.clone();
-                                let par_text = paragraph.text.clone();
-                                let parent_article_node = arc_article_node.clone();
-                                threads.send((parent_article_node, par_text, topic_for_thread));
-                                self.visited_nodes.insert(topic);
-                            }
-                        }
-                    }
+                        article_node.get_paragraphs().par_iter().for_each(|paragraph| {
+                            paragraph.topics.par_iter().for_each(|topic| {
+                                // Do not access the same article more than once!!
+                                if !self.visited_nodes.contains(topic) {
+                                    if let Some(article) = self.article_provider.get(topic) {
+                                        let mut new_node = ArticleNode::new(article);
+                                        new_node.attach_to(
+                                            article_node.clone(),
+                                            (&paragraph).text.to_owned(),
+                                        );
+                                        current_level.lock().unwrap().push(Arc::new(new_node));
+                                    }
+                                }
+                            });
+                        });
+                    });
                 }
-                // Then, read all results:
-                for output in threads.iter() {
-                    match output {
-                        (parent_article, source_paragraph, Some(a)) => {
-                            let mut new_node = ArticleNode::new(a);
-                            new_node.attach_to(parent_article, source_paragraph);
-                            current_level.push(Arc::new(new_node));
-                        }
-                        _ => (),
-                    }
-                }
-
+                // Then, update the last level with the current level.
                 last_level = current_level;
             }
-            // Replace the previous level with this level.
 
+            // Check if one of the articles from last_level contains the final topic we are looking for:
             for article_node in last_level.iter() {
                 if let Some(text) = StoryBuilder::find_text_for_topic_in_article(
                     article_node.deref().deref().borrow(),
