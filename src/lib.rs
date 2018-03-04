@@ -3,3 +3,5 @@ pub mod story_builder {
     pub mod article_provider;
     pub mod story_builder;
 }
+
+pub mod xml_wiki_parser;
